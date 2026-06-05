@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>FinVault - Gastos Compartilhados</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-surface-variant": "#45464d",
+                        "inverse-on-surface": "#eff1f3",
+                        "secondary-fixed-dim": "#d2bbff",
+                        "on-tertiary-fixed": "#002113",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "secondary-fixed": "#eaddff",
+                        "outline": "#76777d",
+                        "on-primary": "#ffffff",
+                        "surface-container-highest": "#e0e3e5",
+                        "on-primary-fixed-variant": "#3f465c",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed": "#131b2e",
+                        "error-container": "#ffdad6",
+                        "surface-container-high": "#e6e8ea",
+                        "on-secondary-fixed-variant": "#5a00c6",
+                        "primary-fixed": "#dae2fd",
+                        "on-tertiary-container": "#009668",
+                        "inverse-primary": "#bec6e0",
+                        "on-secondary-container": "#fffbff",
+                        "on-tertiary": "#ffffff",
+                        "on-surface": "#191c1e",
+                        "primary": "#000000",
+                        "on-secondary": "#ffffff",
+                        "surface-bright": "#f7f9fb",
+                        "surface-container-low": "#f2f4f6",
+                        "primary-fixed-dim": "#bec6e0",
+                        "surface-dim": "#d8dadc",
+                        "surface-tint": "#565e74",
+                        "on-primary-container": "#7c839b",
+                        "secondary": "#712ae2",
+                        "surface": "#f7f9fb",
+                        "error": "#ba1a1a",
+                        "surface-variant": "#e0e3e5",
+                        "primary-container": "#131b2e",
+                        "surface-container": "#eceef0",
+                        "secondary-container": "#8a4cfc",
+                        "on-secondary-fixed": "#25005a",
+                        "tertiary-fixed": "#6ffbbe",
+                        "on-background": "#191c1e",
+                        "inverse-surface": "#2d3133",
+                        "tertiary": "#000000",
+                        "tertiary-container": "#002113",
+                        "surface-container-lowest": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "outline-variant": "#c6c6cd",
+                        "background": "#f7f9fb"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "base": "8px",
+                        "lg": "24px",
+                        "sm": "12px",
+                        "xs": "4px",
+                        "grid-margin": "24px",
+                        "xl": "32px",
+                        "grid-gutter": "16px",
+                        "md": "16px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Inter"],
+                        "label-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "display-currency": ["Inter"],
+                        "headline-lg-mobile": ["Inter"],
+                        "label-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "label-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "500" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "display-currency": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background min-h-screen font-body-md">
+<!-- SideNavBar (Desktop) -->
+<aside class="fixed left-0 top-0 h-screen w-[280px] bg-surface dark:bg-inverse-surface shadow-md dark:shadow-none hidden lg:flex flex-col justify-between py-lg px-md z-40">
+<div>
+<div class="mb-xl flex items-center gap-sm px-sm">
+<div class="h-10 w-10 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+</div>
+<div>
+<h2 class="text-headline-md font-headline-md font-bold text-primary dark:text-primary-fixed text-lg">FinVault</h2>
+<p class="text-label-sm font-label-sm text-on-surface-variant">Gestão Financeira</p>
+</div>
+</div>
+<nav class="flex flex-col gap-xs">
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-all duration-200 text-label-md font-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                    Dashboard
+                </a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-all duration-200 text-label-md font-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="credit_card">credit_card</span>
+                    Cartões
+                </a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-all duration-200 text-label-md font-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="receipt_long">receipt_long</span>
+                    Transações
+                </a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-all duration-200 text-label-md font-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_month">calendar_month</span>
+                    Faturas
+                </a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-all duration-200 text-label-md font-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="reorder">reorder</span>
+                    Parcelamentos
+                </a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-secondary dark:text-secondary-fixed-dim font-bold border-r-4 border-secondary bg-surface-container-high dark:bg-surface-container-highest active:scale-[0.98] transition-all duration-200 text-label-md font-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+                    Gastos Compartilhados
+                </a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-all duration-200 text-label-md font-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="category">category</span>
+                    Categorias
+                </a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-all duration-200 text-label-md font-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+                    Relatórios
+                </a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-all duration-200 text-label-md font-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                    Configurações
+                </a>
+</nav>
+</div>
+<div>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:scale-[0.98] transition-all duration-200 text-label-md font-label-md mt-auto border-t border-outline-variant pt-sm" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+                Sair
+            </a>
+</div>
+</aside>
+<!-- TopNavBar -->
+<header class="docked full-width top-0 bg-surface-container-low dark:bg-surface-container-low flex justify-between items-center w-full px-grid-margin py-md ml-0 lg:ml-[280px] lg:max-w-[calc(100%-280px)] z-30 sticky flat no shadows">
+<div class="flex items-center gap-sm lg:hidden">
+<h1 class="text-headline-md font-headline-md font-black text-primary dark:text-primary-fixed">FinVault</h1>
+</div>
+<div class="hidden lg:block text-headline-md font-headline-md font-bold text-primary dark:text-primary-fixed tracking-tight">
+            Gastos Compartilhados
+        </div>
+<div class="flex items-center gap-md">
+<button class="text-on-surface-variant hover:opacity-80 transition-opacity active:translate-y-px transition-transform p-2 rounded-full">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:opacity-80 transition-opacity active:translate-y-px transition-transform p-2 rounded-full">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+<button class="bg-secondary text-on-secondary px-4 py-2 rounded-lg text-label-md font-label-md font-medium hover:opacity-90 transition-opacity active:scale-[0.98] ml-2 hidden sm:block">
+                Nova Transação
+            </button>
+<img alt="Avatar do usuário" class="w-8 h-8 rounded-full border-2 border-surface ml-2" data-alt="A small, circular profile picture of a professional individual, likely a user avatar, set against a clean, modern interface background. The image should be a close-up, well-lit portrait with a neutral or slightly friendly expression. The overall style should be consistent with a high-end financial application's aesthetic, utilizing soft, natural lighting and clear focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB8gfdqBcKjwMMCoEPcD_RV4ACfh5lRHnt4GGvqOm3Lc7yg9j7H1II3NKbOggB9-gmTyo-LxQWf_xR49PBhwCIOIeXUag-nUOVSi___VBKtA1gA5Dqu1rHZ9yDonIHbjndQZj1OP0TDvd4Mk7eRIBkYXlC47FjABc4PQyS3OBiq76VUdDHc-3idb9egKgwdAQYt9Bsi3Abm-MRnMzYVpx3yTgvvpStlhIFnsEaWju52gmmn-DPJDzzNu4KzHRldY49ArXdwNmXFSps"/>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-0 lg:ml-[280px] p-grid-margin pb-24 lg:pb-grid-margin max-w-7xl mx-auto">
+<div class="lg:hidden mb-lg">
+<h2 class="text-headline-lg-mobile font-headline-lg-mobile font-bold text-primary">Gastos Compartilhados</h2>
+<p class="text-body-md font-body-md text-on-surface-variant mt-1">Controle de Recebíveis</p>
+</div>
+<!-- Summary Cards (Bento Style) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-lg mb-xl">
+<!-- Total a Receber -->
+<div class="bg-surface rounded-xl p-lg shadow-[0_4px_20px_rgba(0,0,0,0.05)] flex flex-col justify-between relative overflow-hidden border border-surface-variant hover:-translate-y-0.5 transition-transform duration-300">
+<div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+<span class="material-symbols-outlined text-6xl text-secondary">account_balance</span>
+</div>
+<div>
+<h3 class="text-label-md font-label-md text-on-surface-variant mb-2">Total a Receber</h3>
+<div class="text-display-currency font-display-currency text-primary">R$ 1.200,00</div>
+</div>
+<div class="mt-4 pt-4 border-t border-surface-variant flex items-center justify-between text-label-sm font-label-sm">
+<span class="text-on-surface-variant">Valor total compartilhado</span>
+<span class="material-symbols-outlined text-secondary text-sm">trending_up</span>
+</div>
+</div>
+<!-- Recebido -->
+<div class="bg-surface rounded-xl p-lg shadow-[0_4px_20px_rgba(0,0,0,0.05)] flex flex-col justify-between relative overflow-hidden border border-surface-variant hover:-translate-y-0.5 transition-transform duration-300">
+<div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+<span class="material-symbols-outlined text-6xl text-tertiary-container">check_circle</span>
+</div>
+<div>
+<h3 class="text-label-md font-label-md text-on-surface-variant mb-2">Recebido</h3>
+<div class="text-headline-lg font-headline-lg text-tertiary-container">R$ 400,00</div>
+</div>
+<div class="mt-4">
+<div class="h-2 w-full bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-tertiary-container rounded-full" style="width: 33.33%"></div>
+</div>
+<div class="text-label-sm font-label-sm text-on-surface-variant mt-2 text-right">33% Concluído</div>
+</div>
+</div>
+<!-- Pendente -->
+<div class="bg-surface rounded-xl p-lg shadow-[0_4px_20px_rgba(0,0,0,0.05)] flex flex-col justify-between relative overflow-hidden border border-surface-variant hover:-translate-y-0.5 transition-transform duration-300">
+<div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+<span class="material-symbols-outlined text-6xl text-error">hourglass_empty</span>
+</div>
+<div>
+<h3 class="text-label-md font-label-md text-on-surface-variant mb-2">Pendente</h3>
+<div class="text-headline-lg font-headline-lg text-on-background">R$ 800,00</div>
+</div>
+<div class="mt-4 pt-4 border-t border-surface-variant flex items-center justify-between text-label-sm font-label-sm">
+<span class="text-error font-medium">Aguardando pagamento</span>
+<span class="material-symbols-outlined text-error text-sm">warning</span>
+</div>
+</div>
+</div>
+<!-- Filters & Actions -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-md mb-lg">
+<h3 class="text-headline-md font-headline-md text-primary">Pendências</h3>
+<div class="flex flex-wrap items-center gap-sm w-full sm:w-auto">
+<div class="relative w-full sm:w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="w-full bg-surface border border-surface-variant rounded-lg pl-9 pr-4 py-2 text-body-md font-body-md text-on-background focus:outline-none focus:ring-2 focus:ring-secondary focus:border-transparent transition-shadow" placeholder="Buscar pessoa..." type="text"/>
+</div>
+<div class="flex gap-2">
+<button class="bg-secondary text-on-primary px-4 py-2 rounded-full text-label-sm font-label-sm flex items-center gap-1 shadow-sm">
+                        Todos
+                    </button>
+<button class="bg-surface border border-surface-variant text-on-surface-variant px-4 py-2 rounded-full text-label-sm font-label-sm flex items-center gap-1 hover:bg-surface-container-low transition-colors">
+                        Pendentes
+                    </button>
+<button class="bg-surface border border-surface-variant text-on-surface-variant px-4 py-2 rounded-full text-label-sm font-label-sm flex items-center gap-1 hover:bg-surface-container-low transition-colors">
+                        Recebidos
+                    </button>
+</div>
+</div>
+</div>
+<!-- Receivables List -->
+<div class="bg-surface rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-surface-variant overflow-hidden">
+<!-- List Header (Desktop) -->
+<div class="hidden md:grid grid-cols-12 gap-4 px-lg py-sm bg-surface-container-low border-b border-surface-variant text-label-sm font-label-sm text-on-surface-variant">
+<div class="col-span-4">Contato / Descrição</div>
+<div class="col-span-3">Data</div>
+<div class="col-span-2 text-right">Valor</div>
+<div class="col-span-3 text-right">Status / Ação</div>
+</div>
+<!-- List Items -->
+<div class="divide-y divide-surface-variant">
+<!-- Item 1: Pendente -->
+<div class="p-lg hover:bg-surface-bright transition-colors group">
+<div class="flex flex-col md:grid md:grid-cols-12 md:items-center gap-4">
+<div class="col-span-4 flex items-center gap-md">
+<div class="h-10 w-10 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-bold flex-shrink-0">
+                                JS
+                            </div>
+<div>
+<h4 class="text-body-md font-body-md font-medium text-primary">João Silva</h4>
+<p class="text-label-sm font-label-sm text-on-surface-variant">Jantar Outback</p>
+</div>
+</div>
+<div class="col-span-3 text-body-md font-body-md text-on-surface-variant hidden md:block">
+                            12 Out 2023
+                        </div>
+<div class="col-span-2 text-right">
+<span class="md:hidden text-label-sm font-label-sm text-on-surface-variant mr-2">Valor:</span>
+<span class="text-body-md font-body-md font-semibold text-primary">R$ 85,00</span>
+</div>
+<div class="col-span-3 flex justify-between md:justify-end items-center gap-md">
+<span class="px-2 py-1 bg-surface-container-highest text-on-surface-variant rounded text-xs font-bold uppercase tracking-wider">
+                                Pendente
+                            </span>
+<button class="bg-secondary text-on-primary px-3 py-1.5 rounded-lg text-label-sm font-label-sm font-medium hover:opacity-90 transition-opacity active:scale-[0.98] shadow-sm">
+                                Recebido
+                            </button>
+</div>
+</div>
+</div>
+<!-- Item 2: Recebido -->
+<div class="p-lg bg-surface hover:bg-surface-bright transition-colors group">
+<div class="flex flex-col md:grid md:grid-cols-12 md:items-center gap-4">
+<div class="col-span-4 flex items-center gap-md">
+<div class="h-10 w-10 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container font-bold flex-shrink-0">
+                                MO
+                            </div>
+<div>
+<h4 class="text-body-md font-body-md font-medium text-primary line-through opacity-70">Maria Oliveira</h4>
+<p class="text-label-sm font-label-sm text-on-surface-variant">Mercado</p>
+</div>
+</div>
+<div class="col-span-3 text-body-md font-body-md text-on-surface-variant hidden md:block">
+                            10 Out 2023
+                        </div>
+<div class="col-span-2 text-right opacity-70">
+<span class="md:hidden text-label-sm font-label-sm text-on-surface-variant mr-2">Valor:</span>
+<span class="text-body-md font-body-md font-semibold text-primary">R$ 250,00</span>
+</div>
+<div class="col-span-3 flex justify-between md:justify-end items-center gap-md">
+<span class="px-2 py-1 bg-tertiary-fixed-dim bg-opacity-20 text-on-tertiary-container rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check</span> Recebido
+                            </span>
+</div>
+</div>
+</div>
+<!-- Item 3: Pendente -->
+<div class="p-lg hover:bg-surface-bright transition-colors group">
+<div class="flex flex-col md:grid md:grid-cols-12 md:items-center gap-4">
+<div class="col-span-4 flex items-center gap-md">
+<div class="h-10 w-10 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-bold flex-shrink-0">
+                                PA
+                            </div>
+<div>
+<h4 class="text-body-md font-body-md font-medium text-primary">Pedro Alves</h4>
+<p class="text-label-sm font-label-sm text-on-surface-variant">Uber Viagem</p>
+</div>
+</div>
+<div class="col-span-3 text-body-md font-body-md text-on-surface-variant hidden md:block">
+                            14 Out 2023
+                        </div>
+<div class="col-span-2 text-right">
+<span class="md:hidden text-label-sm font-label-sm text-on-surface-variant mr-2">Valor:</span>
+<span class="text-body-md font-body-md font-semibold text-primary">R$ 35,50</span>
+</div>
+<div class="col-span-3 flex justify-between md:justify-end items-center gap-md">
+<span class="px-2 py-1 bg-surface-container-highest text-on-surface-variant rounded text-xs font-bold uppercase tracking-wider">
+                                Pendente
+                            </span>
+<button class="bg-secondary text-on-primary px-3 py-1.5 rounded-lg text-label-sm font-label-sm font-medium hover:opacity-90 transition-opacity active:scale-[0.98] shadow-sm">
+                                Recebido
+                            </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile) -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-surface dark:bg-inverse-surface shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-50 lg:hidden shadow-lg border-t border-surface-variant">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-low transition-colors rounded-lg p-2 w-16" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="home">home</span>
+<span class="text-label-sm font-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-low transition-colors rounded-lg p-2 w-16" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="credit_card">credit_card</span>
+<span class="text-label-sm font-label-sm">Cartões</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-low transition-colors rounded-lg p-2 w-16 relative -top-3" href="#">
+<div class="bg-secondary text-on-secondary rounded-full p-3 shadow-md">
+<span class="material-symbols-outlined" data-icon="add_circle">add</span>
+</div>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim font-bold hover:bg-surface-container-low transition-colors rounded-lg p-2 w-16 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="group" data-weight="fill" style="font-variation-settings: 'FILL' 1;">group</span>
+<span class="text-label-sm font-label-sm">Gastos</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-low transition-colors rounded-lg p-2 w-16" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="more_horiz">more_horiz</span>
+<span class="text-label-sm font-label-sm">Mais</span>
+</a>
+</nav>
+</body></html>

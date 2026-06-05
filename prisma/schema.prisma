@@ -1,0 +1,152 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String                   @id @default(cuid())
+  email        String                   @unique
+  password     String
+  name         String
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  cards        CreditCard[]
+  categories   Category[]
+  transactions Transaction[]
+  installments TransactionInstallment[]
+  invoices     Invoice[]
+  debtors      Debtor[]
+}
+
+model CreditCard {
+  id           String                   @id @default(cuid())
+  name         String
+  bankName     String
+  brand        String
+  lastDigits   String
+  limit        Float
+  closingDay   Int
+  dueDay       Int
+  color        String                   @default("#712ae2")
+  isActive     Boolean                  @default(true)
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  userId       String
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  installments TransactionInstallment[]
+  invoices     Invoice[]
+}
+
+model Category {
+  id           String        @id @default(cuid())
+  name         String
+  color        String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+}
+
+model Debtor {
+  id                String             @id @default(cuid())
+  name              String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  splits            TransactionSplit[]
+  installmentSplits InstallmentSplit[]
+}
+
+model Transaction {
+  id                String                   @id @default(cuid())
+  description       String
+  purchaseDate      DateTime
+  amountTotal       Float
+  installmentsCount Int
+  currentStatus     String                   @default("finished") // "pending", "finished"
+  notes             String?
+  recurrenceType    String                   @default("none") // "none", "fixed", "installments"
+  recurrencePeriod  String                   @default("monthly") // "daily", "weekly", "biweekly", "monthly"
+  installmentStart  Int                      @default(1)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  cardId            String
+  card              CreditCard               @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  categoryId        String
+  category          Category                 @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  installments      TransactionInstallment[]
+  splits            TransactionSplit[]
+}
+
+model TransactionInstallment {
+  id                String             @id @default(cuid())
+  installmentNumber Int
+  amount            Float
+  dueMonth          Int
+  dueYear           Int
+  status            String             @default("pending") // "pending", "paid"
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  transactionId     String
+  transaction       Transaction        @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  cardId            String
+  card              CreditCard         @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  invoiceId         String?
+  invoice           Invoice?           @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  splits            InstallmentSplit[]
+}
+
+model TransactionSplit {
+  id            String      @id @default(cuid())
+  amount        Float
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  debtorId      String
+  debtor        Debtor      @relation(fields: [debtorId], references: [id], onDelete: Cascade)
+}
+
+model InstallmentSplit {
+  id            String                 @id @default(cuid())
+  amount        Float
+  paid          Boolean                @default(false)
+  paidAt        DateTime?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  installmentId String
+  installment   TransactionInstallment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  debtorId      String
+  debtor        Debtor                 @relation(fields: [debtorId], references: [id], onDelete: Cascade)
+}
+
+model Invoice {
+  id             String                   @id @default(cuid())
+  referenceMonth Int
+  referenceYear  Int
+  closingDate    DateTime
+  dueDate        DateTime
+  totalAmount    Float                    @default(0.0)
+  status         String                   @default("open") // "open", "closed", "paid", "overdue"
+  paidAt         DateTime?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  cardId         String
+  card           CreditCard               @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  installments   TransactionInstallment[]
+
+  @@unique([cardId, referenceMonth, referenceYear])
+}

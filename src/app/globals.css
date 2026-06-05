@@ -1,0 +1,367 @@
+@import "tailwindcss";
+
+/* Disable OS-based dark mode — this app is always light.
+   dark: classes only activate with an explicit .dark parent class,
+   which this app never sets. Prevents the OS dark mode from
+   activating dark: variants in the sidebar, topnav, etc. */
+@variant dark (&:where(.dark, .dark *));
+
+/* =====================================================
+   DESIGN TOKENS — FinVault (Stitch Fintech Core)
+   ====================================================
+   Todos os tokens CSS ficam em :root e são mapeados
+   para classes Tailwind v4 via @theme.
+   ===================================================== */
+
+:root {
+  /* --- Surface Scale --- */
+  --background: #f7f9fb;
+  --foreground: #191c1e;
+  --on-background: #191c1e;
+
+  --surface: #f7f9fb;
+  --surface-dim: #d8dadc;
+  --surface-bright: #f7f9fb;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f2f4f6;
+  --surface-container: #eceef0;
+  --surface-container-high: #e6e8ea;
+  --surface-container-highest: #e0e3e5;
+  --surface-variant: #e0e3e5;
+
+  /* --- On-Surface --- */
+  --on-surface: #191c1e;
+  --on-surface-variant: #45464d;
+  --inverse-surface: #2d3133;
+  --inverse-on-surface: #eff1f3;
+
+  /* --- Outline --- */
+  --outline: #76777d;
+  --outline-variant: #c6c6cd;
+  --surface-tint: #565e74;
+
+  /* --- Primary (Navy/Black) --- */
+  --primary: #000000;
+  --on-primary: #ffffff;
+  --primary-container: #131b2e;
+  --on-primary-container: #7c839b;
+  --inverse-primary: #bec6e0;
+
+  /* --- Secondary (Purple) --- */
+  --secondary: #712ae2;
+  --on-secondary: #ffffff;
+  --secondary-container: #8a4cfc;
+  --on-secondary-container: #fffbff;
+
+  /* --- Tertiary (Green) --- */
+  --tertiary: #000000;
+  --on-tertiary: #ffffff;
+  --tertiary-container: #002113;
+  --on-tertiary-container: #009668;
+
+  /* --- Error --- */
+  --error: #ba1a1a;
+  --on-error: #ffffff;
+  --error-container: #ffdad6;
+  --on-error-container: #93000a;
+
+  /* --- Fixed Variants --- */
+  --primary-fixed: #dae2fd;
+  --primary-fixed-dim: #bec6e0;
+  --on-primary-fixed: #131b2e;
+  --on-primary-fixed-variant: #3f465c;
+
+  --secondary-fixed: #eaddff;
+  --secondary-fixed-dim: #d2bbff;
+  --on-secondary-fixed: #25005a;
+  --on-secondary-fixed-variant: #5a00c6;
+
+  --tertiary-fixed: #6ffbbe;
+  --tertiary-fixed-dim: #4edea3;
+  --on-tertiary-fixed: #002113;
+  --on-tertiary-fixed-variant: #005236;
+}
+
+/* =====================================================
+   TAILWIND v4 THEME MAPPING
+   Aqui mapeamos os tokens CSS para classes Tailwind.
+   ===================================================== */
+@theme inline {
+  /* --- Colors --- */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-on-background: var(--on-background);
+
+  --color-surface: var(--surface);
+  --color-surface-dim: var(--surface-dim);
+  --color-surface-bright: var(--surface-bright);
+  --color-surface-container-lowest: var(--surface-container-lowest);
+  --color-surface-container-low: var(--surface-container-low);
+  --color-surface-container: var(--surface-container);
+  --color-surface-container-high: var(--surface-container-high);
+  --color-surface-container-highest: var(--surface-container-highest);
+  --color-surface-variant: var(--surface-variant);
+
+  --color-on-surface: var(--on-surface);
+  --color-on-surface-variant: var(--on-surface-variant);
+  --color-inverse-surface: var(--inverse-surface);
+  --color-inverse-on-surface: var(--inverse-on-surface);
+
+  --color-outline: var(--outline);
+  --color-outline-variant: var(--outline-variant);
+  --color-surface-tint: var(--surface-tint);
+
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-primary-container: var(--primary-container);
+  --color-on-primary-container: var(--on-primary-container);
+  --color-inverse-primary: var(--inverse-primary);
+
+  --color-secondary: var(--secondary);
+  --color-on-secondary: var(--on-secondary);
+  --color-secondary-container: var(--secondary-container);
+  --color-on-secondary-container: var(--on-secondary-container);
+
+  --color-tertiary: var(--tertiary);
+  --color-on-tertiary: var(--on-tertiary);
+  --color-tertiary-container: var(--tertiary-container);
+  --color-on-tertiary-container: var(--on-tertiary-container);
+
+  --color-error: var(--error);
+  --color-on-error: var(--on-error);
+  --color-error-container: var(--error-container);
+  --color-on-error-container: var(--on-error-container);
+
+  --color-primary-fixed: var(--primary-fixed);
+  --color-primary-fixed-dim: var(--primary-fixed-dim);
+  --color-on-primary-fixed: var(--on-primary-fixed);
+  --color-on-primary-fixed-variant: var(--on-primary-fixed-variant);
+
+  --color-secondary-fixed: var(--secondary-fixed);
+  --color-secondary-fixed-dim: var(--secondary-fixed-dim);
+  --color-on-secondary-fixed: var(--on-secondary-fixed);
+  --color-on-secondary-fixed-variant: var(--on-secondary-fixed-variant);
+
+  --color-tertiary-fixed: var(--tertiary-fixed);
+  --color-tertiary-fixed-dim: var(--tertiary-fixed-dim);
+  --color-on-tertiary-fixed: var(--on-tertiary-fixed);
+  --color-on-tertiary-fixed-variant: var(--on-tertiary-fixed-variant);
+
+  /* --- Font Family --- */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* =====================================================
+     SPACING SCALE (8px base)
+     Gera: p-xs, p-sm, p-md, p-lg, p-xl
+           gap-xs, gap-sm, gap-md, gap-lg, gap-xl
+           m-xs, m-sm, m-md, m-lg, m-xl
+           space-y-xs ... space-y-xl
+           w-xs, w-sm, w-md, w-lg, w-xl, w-2xl
+           h-xs, h-sm ... etc.
+     ===================================================== */
+  --spacing-xs: 0.25rem;      /* 4px  */
+  --spacing-sm: 0.75rem;      /* 12px */
+  --spacing-md: 1rem;         /* 16px */
+  --spacing-lg: 1.5rem;       /* 24px */
+  --spacing-xl: 2rem;         /* 32px */
+  --spacing-2xl: 3rem;        /* 48px */
+  --spacing-grid-margin: 1.5rem; /* 24px */
+  --spacing-grid-gutter: 1rem;   /* 16px */
+
+  /* =====================================================
+     TYPOGRAPHY SCALE
+     Gera: text-headline-md, text-body-lg, text-label-md, etc.
+     ===================================================== */
+
+  /* display-currency: 40px / 700 / -0.02em */
+  --text-display-currency: 2.5rem;
+  --text-display-currency--line-height: 3rem;
+  --text-display-currency--letter-spacing: -0.02em;
+  --text-display-currency--font-weight: 700;
+
+  /* headline-lg: 32px / 600 / -0.01em */
+  --text-headline-lg: 2rem;
+  --text-headline-lg--line-height: 2.5rem;
+  --text-headline-lg--letter-spacing: -0.01em;
+  --text-headline-lg--font-weight: 600;
+
+  /* headline-md: 24px / 600 */
+  --text-headline-md: 1.5rem;
+  --text-headline-md--line-height: 2rem;
+  --text-headline-md--font-weight: 600;
+
+  /* headline-sm: 20px / 600 */
+  --text-headline-sm: 1.25rem;
+  --text-headline-sm--line-height: 1.75rem;
+  --text-headline-sm--font-weight: 600;
+
+  /* body-lg: 18px / 400 */
+  --text-body-lg: 1.125rem;
+  --text-body-lg--line-height: 1.75rem;
+  --text-body-lg--font-weight: 400;
+
+  /* body-md: 16px / 400 */
+  --text-body-md: 1rem;
+  --text-body-md--line-height: 1.5rem;
+  --text-body-md--font-weight: 400;
+
+  /* body-sm: 14px / 400 */
+  --text-body-sm: 0.875rem;
+  --text-body-sm--line-height: 1.25rem;
+  --text-body-sm--font-weight: 400;
+
+  /* label-md: 14px / 500 / +0.01em */
+  --text-label-md: 0.875rem;
+  --text-label-md--line-height: 1.25rem;
+  --text-label-md--letter-spacing: 0.01em;
+  --text-label-md--font-weight: 500;
+
+  /* label-sm: 12px / 600 */
+  --text-label-sm: 0.75rem;
+  --text-label-sm--line-height: 1rem;
+  --text-label-sm--font-weight: 600;
+
+  /* =====================================================
+     FONT-WEIGHT shortcuts (for font-headline-md etc.)
+     Gera: font-display-currency, font-headline-md, etc.
+     ===================================================== */
+  --font-weight-display-currency: 700;
+  --font-weight-headline-lg: 600;
+  --font-weight-headline-md: 600;
+  --font-weight-headline-sm: 600;
+  --font-weight-body-lg: 400;
+  --font-weight-body-md: 400;
+  --font-weight-body-sm: 400;
+  --font-weight-label-md: 500;
+  --font-weight-label-sm: 600;
+
+  /* =====================================================
+     BORDER RADIUS SCALE
+     Gera: rounded-sm, rounded-md, rounded-lg, rounded-xl
+     ===================================================== */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  /* =====================================================
+     WIDTH & MAX-WIDTH SCALES
+     Restores standard layout widths that would otherwise
+     be overridden by custom spacing tokens in Tailwind v4.
+     ===================================================== */
+  --width-xs: 20rem;
+  --width-sm: 24rem;
+  --width-md: 28rem;
+  --width-lg: 32rem;
+  --width-xl: 36rem;
+  --width-2xl: 42rem;
+  --width-3xl: 48rem;
+
+  --max-width-xs: 20rem;
+  --max-width-sm: 24rem;
+  --max-width-md: 28rem;
+  --max-width-lg: 32rem;
+  --max-width-xl: 36rem;
+  --max-width-2xl: 42rem;
+  --max-width-3xl: 48rem;
+  --max-width-4xl: 56rem;
+  --max-width-5xl: 64rem;
+  --max-width-6xl: 72rem;
+  --max-width-7xl: 80rem;
+}
+
+
+/* =====================================================
+   BASE STYLES
+   ===================================================== */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  overflow-x: hidden;
+  font-feature-settings: "tnum"; /* tabular nums para valores financeiros */
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+}
+
+/* =====================================================
+   CUSTOM SCROLLBAR
+   ===================================================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--outline-variant);
+  border-radius: 20px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--outline);
+}
+
+/* =====================================================
+   MATERIAL SYMBOLS CONFIGURATION
+   ===================================================== */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+  font-size: 1.5rem; /* 24px default */
+}
+
+.icon-fill {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* =====================================================
+   GLASSMORPHISM
+   ===================================================== */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(25, 28, 30, 0.08);
+}
+
+.glass-glow {
+  box-shadow: 0 4px 30px rgba(113, 42, 226, 0.05);
+}
+
+/* =====================================================
+   CARD GRADIENTS (Bandeiras)
+   ===================================================== */
+.card-grad-nubank {
+  background: linear-gradient(135deg, #8a05be 0%, #4a006b 100%);
+}
+
+.card-grad-inter {
+  background: linear-gradient(135deg, #ff7a00 0%, #b25500 100%);
+}
+
+.card-grad-itau {
+  background: linear-gradient(135deg, #0056b3 0%, #002855 100%);
+}
+
+.card-grad-generic {
+  background: linear-gradient(135deg, #3f3f46 0%, #18181b 100%);
+}
+
+/* =====================================================
+   ANIMATIONS
+   ===================================================== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
