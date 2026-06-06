@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { createInstallmentsForTransaction } from '@/lib/invoice-utils';
+import { createInstallmentsForTransaction, ensureRecurringTransactions } from '@/lib/invoice-utils';
 
 export async function GET(request: Request) {
   try {
@@ -117,6 +117,9 @@ export async function POST(request: Request) {
 
     // Gera as parcelas e atualiza faturas
     await createInstallmentsForTransaction(transaction.id);
+
+    // Garante que as transações recorrentes tenham sempre 12 meses de faturamento futuro
+    await ensureRecurringTransactions(user.userId);
 
     return NextResponse.json({ success: true, transaction });
   } catch (error: any) {

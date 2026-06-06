@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CustomSelect, { SelectOption } from './CustomSelect';
+import MonthPicker from './MonthPicker';
 
 const statusOptions: SelectOption[] = [
   { value: 'all', label: 'Todos os Status', icon: 'filter_list' },
@@ -65,6 +66,14 @@ interface Invoice {
   card: Card;
   installments: Installment[];
 }
+
+const getMonthName = (month: number) => {
+  const months = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+  ];
+  return months[month - 1];
+};
 
 interface InvoicesClientProps {
   initialInvoices: Invoice[];
@@ -197,8 +206,50 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterMonth, setFilterMonth] = useState('this-month');
 
+  // Export filtered invoices to CSV
+  const handleExportCSV = () => {
+    const headers = ['Mês Referência', 'Cartão', 'Fechamento', 'Vencimento', 'Total (R$)', 'Status'];
+    
+    const rows = filteredInvoices.map(inv => {
+      const refMonthStr = `${getMonthName(inv.referenceMonth)} de ${inv.referenceYear}`;
+      const card = inv.card.name;
+      const closing = new Date(inv.closingDate).toLocaleDateString('pt-BR');
+      const due = new Date(inv.dueDate).toLocaleDateString('pt-BR');
+      const total = inv.totalAmount.toFixed(2).replace('.', ',');
+      
+      let statusText = 'Aberta';
+      if (inv.status === 'paid') statusText = 'Paga';
+      else if (inv.status === 'closed') statusText = 'Fechada';
+      else if (inv.status === 'overdue') statusText = 'Atrasada';
+      
+      return [
+        refMonthStr,
+        `"${card.replace(/"/g, '""')}"`,
+        closing,
+        due,
+        total,
+        statusText
+      ];
+    });
+    
+    const csvContent = [
+      headers.join(';'),
+      ...rows.map(row => row.join(';'))
+    ].join('\n');
+    
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `faturas_${filterMonth}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const cardOptions: SelectOption[] = [
-    { value: 'all', label: 'Todos os Cartões', icon: 'credit_card' },
+    { value: 'all', label: 'Todos os cartões', icon: 'credit_card' },
     ...cards.map(c => ({
       value: c.id,
       label: c.name,
@@ -326,48 +377,88 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
     }
   };
 
-  const getMonthName = (month: number) => {
-    const months = [
-      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-    ];
-    return months[month - 1];
-  };
-
   return (
     <div className="space-y-md">
       
-      {/* Filters Bar */}
-      <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md flex flex-wrap md:flex-nowrap gap-md items-center justify-between shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
-        <h2 className="text-label-md font-bold text-on-surface-variant flex items-center gap-xs uppercase tracking-wider select-none">
-          <span className="material-symbols-outlined text-secondary text-[20px]">calendar_month</span>
-          Filtros de Faturamento
+      {/* Top header row */}
+      <div className="flex flex-wrap items-center justify-between gap-md mb-md">
+        <h2 className="text-body-lg font-bold text-on-surface flex items-center gap-xs">
+          <span className="material-symbols-outlined text-secondary text-2xl">calendar_month</span>
+          Faturas
         </h2>
+      </div>
 
-        <div className="flex flex-wrap md:flex-nowrap gap-sm w-full md:w-auto">
-          <div className="flex-1 min-w-[120px] md:w-48">
-            <CustomSelect
-              options={cardOptions}
-              value={filterCard}
-              onChange={setFilterCard}
-            />
-          </div>
+      {/* Filters Bar Card */}
+      <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md flex flex-wrap lg:flex-nowrap gap-md items-end shadow-[0_4px_20px_rgba(0,0,0,0.03)] w-full mb-md select-none">
+        {/* Cartão select column */}
+        <div className="flex-1 min-w-[150px] lg:max-w-[200px]">
+          <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Cartão</label>
+          <CustomSelect
+            options={cardOptions}
+            value={filterCard}
+            onChange={setFilterCard}
+            variant="filter"
+            hideSelectedIcon={true}
+          />
+        </div>
 
-          <div className="flex-1 min-w-[120px] md:w-48">
-            <CustomSelect
-              options={statusOptions}
-              value={filterStatus}
-              onChange={setFilterStatus}
-            />
-          </div>
+        {/* Mês select column */}
+        <div className="flex-1 min-w-[150px] lg:max-w-[200px]">
+          <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Mês</label>
+          <MonthPicker
+            value={filterMonth}
+            onChange={setFilterMonth}
+            variant="filter"
+          />
+        </div>
 
-          <div className="flex-1 min-w-[120px] md:w-48">
-            <CustomSelect
-              options={monthFilterOptions}
-              value={filterMonth}
-              onChange={setFilterMonth}
+        {/* Status segmented selector */}
+        <div className="flex-grow min-w-[280px]">
+          <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Status</label>
+          <div className="relative inline-flex p-1 bg-[#EFF1F4] border border-transparent rounded-lg h-[42px] items-center w-full select-none overflow-x-auto">
+            {/* Sliding background indicator */}
+            <div 
+              className="absolute top-1 bottom-1 bg-white rounded-md shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-outline-variant/15 transition-all duration-300 ease-out"
+              style={{
+                width: 'calc((100% - 8px) / 5)',
+                left: filterStatus === 'all' 
+                  ? '4px' 
+                  : filterStatus === 'open' 
+                    ? 'calc(4px + (100% - 8px) / 5)' 
+                    : filterStatus === 'closed' 
+                      ? 'calc(4px + 2 * (100% - 8px) / 5)' 
+                      : filterStatus === 'paid' 
+                        ? 'calc(4px + 3 * (100% - 8px) / 5)' 
+                        : 'calc(4px + 4 * (100% - 8px) / 5)'
+              }}
             />
+            {statusOptions.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setFilterStatus(opt.value)}
+                className={`relative z-10 flex-1 h-full px-sm rounded-md text-label-sm font-semibold transition-colors duration-200 select-none cursor-pointer text-center flex items-center justify-center whitespace-nowrap ${
+                  filterStatus === opt.value
+                    ? 'text-secondary font-bold'
+                    : 'text-on-surface-variant/70 hover:text-on-surface'
+                }`}
+              >
+                {opt.label.replace('Todos os Status', 'Todos')}
+              </button>
+            ))}
           </div>
+        </div>
+
+        {/* Export CSV button column */}
+        <div className="ml-auto shrink-0 pb-[2px]">
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            className="h-[38px] px-md text-secondary hover:bg-secondary/5 font-label-md text-label-md transition-colors rounded-lg flex items-center justify-center gap-xs cursor-pointer select-none"
+          >
+            <span className="material-symbols-outlined text-[20px]">download</span>
+            <span>Exportar CSV</span>
+          </button>
         </div>
       </div>
 

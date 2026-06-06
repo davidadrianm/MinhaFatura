@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import CustomSelect, { SelectOption } from './CustomSelect';
+import MonthPicker from './MonthPicker';
 
 interface CardOption {
   id: string;
@@ -66,32 +67,30 @@ const getMonthFilterOptions = (): SelectOption[] => {
   return options;
 };
 
-const matchMonthFilter = (filterVal: string, targetMonth: number, targetYear: number) => {
-  if (filterVal === 'all') return true;
+const getFilterMonthYear = (filterVal: string): { month: number; year: number } | null => {
+  if (filterVal === 'all') return null;
   
   const now = new Date();
   
   if (filterVal === 'this-month') {
-    return targetMonth === (now.getMonth() + 1) && targetYear === now.getFullYear();
+    return { month: now.getMonth() + 1, year: now.getFullYear() };
   }
   if (filterVal === 'last-month') {
     const d = new Date();
     d.setMonth(now.getMonth() - 1);
-    return targetMonth === (d.getMonth() + 1) && targetYear === d.getFullYear();
+    return { month: d.getMonth() + 1, year: d.getFullYear() };
   }
   if (filterVal === 'next-month') {
     const d = new Date();
     d.setMonth(now.getMonth() + 1);
-    return targetMonth === (d.getMonth() + 1) && targetYear === d.getFullYear();
+    return { month: d.getMonth() + 1, year: d.getFullYear() };
   }
   
   const [mStr, yStr] = filterVal.split('-');
   const m = parseInt(mStr);
   const y = parseInt(yStr);
-  return targetMonth === m && targetYear === y;
+  return { month: m, year: y };
 };
-
-const monthFilterOptions = getMonthFilterOptions();
 
 interface CategoryOption {
   id: string;
@@ -157,7 +156,7 @@ export default function TransactionsClient({
   debtors,
 }: TransactionsClientProps) {
   const filterCardOptions: SelectOption[] = [
-    { value: 'all', label: 'Todos os Cartões', icon: 'credit_card' },
+    { value: 'all', label: 'Todos os cartões', icon: 'credit_card' },
     ...cards.map(c => ({ value: c.id, label: c.name, icon: 'credit_card' }))
   ];
 
@@ -168,7 +167,7 @@ export default function TransactionsClient({
   }));
 
   const filterCategoryOptions: SelectOption[] = [
-    { value: 'all', label: 'Todas as Categorias', icon: 'category' },
+    { value: 'all', label: 'Todas', icon: 'category' },
     ...categories.map(c => ({ value: c.id, label: c.name, color: c.color }))
   ];
 
@@ -200,6 +199,8 @@ export default function TransactionsClient({
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const [isOpen, setIsOpen] = useState(false); // Modal state
   const [mounted, setMounted] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -219,6 +220,7 @@ export default function TransactionsClient({
   const [formSplits, setFormSplits] = useState<{ debtorId: string; name: string; amount: string }[]>([]);
   const [selectedDebtorId, setSelectedDebtorId] = useState(debtors[0]?.id || '');
   const [splitDebtorAmount, setSplitDebtorAmount] = useState('');
+  const [splitDebtorAmountFormatted, setSplitDebtorAmountFormatted] = useState('');
 
   // Formatted Amount Mask state
   const [amountFormatted, setAmountFormatted] = useState('');
@@ -251,12 +253,95 @@ export default function TransactionsClient({
       })
     );
   };
+
+  // Handle automatic decimal formatting for debtor split amount (comma as decimal separator)
+  const handleSplitAmountChange = (val: string) => {
+    const digits = val.replace(/\D/g, '');
+    if (!digits) {
+      setSplitDebtorAmount('');
+      setSplitDebtorAmountFormatted('');
+      return;
+    }
+    const numValue = parseInt(digits, 10) / 100;
+    setSplitDebtorAmount(numValue.toFixed(2));
+    setSplitDebtorAmountFormatted(
+      numValue.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    );
+  };
+
+  // Export filtered transactions to CSV
+  const handleExportCSV = () => {
+    const headers = ['Data', 'Descrição', 'Categoria', 'Cartão', 'Tipo', 'Valor (R$)', 'Status', 'Compartilhado'];
+    
+    const rows = filteredTransactions.map(tx => {
+      const dateStr = new Date(tx.purchaseDate).toLocaleDateString('pt-BR');
+      const desc = tx.description;
+      const cat = tx.category.name;
+      const card = tx.card.name;
+      
+      const type = tx.recurrenceType || 'none';
+      let typeText = 'À vista';
+      if (type === 'fixed' || type === 'fixed_ended') {
+        typeText = 'Recorrente';
+      } else if (type === 'installments') {
+        typeText = 'Parcelada';
+      }
+      
+      const filter = getFilterMonthYear(filterMonth);
+      let amountVal = tx.amountTotal;
+      let statusText = 'Pendente';
+      if (filter) {
+        const inst = tx.installments?.find(
+          i => i.dueMonth === filter.month && i.dueYear === filter.year
+        );
+        if (inst) {
+          amountVal = inst.amount;
+          statusText = inst.status === 'paid' ? 'Pago' : 'Pendente';
+        }
+      } else {
+        const allPaid = tx.installments && tx.installments.length > 0 && tx.installments.every(i => i.status === 'paid');
+        statusText = allPaid ? 'Pago' : 'Pendente';
+      }
+      
+      const sharedText = tx.splits && tx.splits.length > 0 ? 'Sim' : 'Não';
+      
+      return [
+        dateStr,
+        `"${desc.replace(/"/g, '""')}"`,
+        `"${cat.replace(/"/g, '""')}"`,
+        `"${card.replace(/"/g, '""')}"`,
+        typeText,
+        amountVal.toFixed(2).replace('.', ','),
+        statusText,
+        sharedText
+      ];
+    });
+    
+    const csvContent = [
+      headers.join(';'),
+      ...rows.map(row => row.join(';'))
+    ].join('\n');
+    
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `transacoes_${filterMonth}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   
   // Filtros
   const [search, setSearch] = useState('');
   const [filterCard, setFilterCard] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterMonth, setFilterMonth] = useState('this-month');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'pending'>('all');
   
   // Estado para controlar quais parcelas estão expandidas
   const [expandedTxIds, setExpandedTxIds] = useState<Set<string>>(new Set());
@@ -290,6 +375,7 @@ export default function TransactionsClient({
       setIsSplit(false);
       setFormSplits([]);
       setSplitDebtorAmount('');
+      setSplitDebtorAmountFormatted('');
       setRecurrenceType('none');
       setRecurrencePeriod('monthly');
       setInstallmentStart('1');
@@ -303,12 +389,14 @@ export default function TransactionsClient({
     const totalVal = parseFloat(amountTotal);
     
     if (isNaN(amountVal) || amountVal <= 0) {
-      alert('Digite um valor válido para a divisão.');
+      setError('Digite um valor válido para a divisão.');
+      modalBodyRef.current?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
     
     if (isNaN(totalVal) || totalVal <= 0) {
-      alert('Preencha o valor total da compra primeiro.');
+      setError('Preencha o valor total da compra primeiro.');
+      modalBodyRef.current?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
 
@@ -316,18 +404,22 @@ export default function TransactionsClient({
     if (!debtor) return;
 
     if (formSplits.some(s => s.debtorId === selectedDebtorId)) {
-      alert('Este devedor já foi adicionado.');
+      setError('Este devedor já foi adicionado.');
+      modalBodyRef.current?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
 
     const currentSum = formSplits.reduce((sum, s) => sum + parseFloat(s.amount), 0);
     if (currentSum + amountVal > totalVal) {
-      alert('A soma das divisões não pode exceder o valor total da compra.');
+      setError('A soma das divisões não pode exceder o valor total da compra.');
+      modalBodyRef.current?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
 
     setFormSplits([...formSplits, { debtorId: selectedDebtorId, name: debtor.name, amount: splitDebtorAmount }]);
     setSplitDebtorAmount('');
+    setSplitDebtorAmountFormatted('');
+    setError('');
   };
 
   const handleRemoveSplit = (debtorId: string) => {
@@ -379,7 +471,7 @@ export default function TransactionsClient({
           description,
           purchaseDate,
           amountTotal,
-          installmentsCount: recurrenceType === 'none' ? '1' : (recurrenceType === 'fixed' ? '60' : installmentsCount),
+          installmentsCount: recurrenceType === 'none' ? '1' : (recurrenceType === 'fixed' ? '12' : installmentsCount),
           cardId,
           categoryId,
           notes,
@@ -424,18 +516,47 @@ export default function TransactionsClient({
     }
   };
 
-  const handleDeleteTransaction = async (txId: string) => {
-    if (!confirm('Deseja excluir esta compra? Todas as parcelas associadas serão apagadas e os valores das faturas recalculados.')) {
-      return;
+  const handleDeleteClick = (tx: Transaction) => {
+    if (tx.recurrenceType === 'fixed' || tx.recurrenceType === 'fixed_ended') {
+      const filter = getFilterMonthYear(filterMonth);
+      if (filter) {
+        setTxToDelete(tx);
+        setIsDeleteModalOpen(true);
+        return;
+      }
     }
 
+    if (confirm('Deseja excluir esta compra? Todas as parcelas associadas serão apagadas e os valores das faturas recalculados.')) {
+      handleDeleteTransaction(tx.id, 'all');
+    }
+  };
+
+  const handleDeleteTransaction = async (txId: string, type: 'all' | 'future' = 'all', month?: number, year?: number) => {
     try {
-      const res = await fetch(`/api/transactions/${txId}`, {
+      let url = `/api/transactions/${txId}?type=${type}`;
+      if (type === 'future' && month && year) {
+        url += `&month=${month}&year=${year}`;
+      }
+
+      const res = await fetch(url, {
         method: 'DELETE',
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setTransactions(transactions.filter(t => t.id !== txId));
+        if (type === 'all') {
+          setTransactions(transactions.filter(t => t.id !== txId));
+        } else {
+          // Se deletou parcelas futuras, busca a lista atualizada para sincronizar o estado
+          const fetchRes = await fetch(`/api/transactions?cardId=${filterCard}&categoryId=${filterCategory}`);
+          const fetchData = await fetchRes.json();
+          if (fetchData.success) {
+            const mapped = fetchData.transactions.map((tx: any) => ({
+              ...tx,
+              purchaseDate: tx.purchaseDate.split('T')[0]
+            }));
+            setTransactions(mapped);
+          }
+        }
         router.refresh();
       } else {
         alert(data.error || 'Erro ao deletar transação.');
@@ -461,13 +582,31 @@ export default function TransactionsClient({
     const matchesCard = filterCard === 'all' || tx.card.id === filterCard;
     const matchesCategory = filterCategory === 'all' || tx.category.id === filterCategory;
     
-    // Month Filter Logic
-    const [yStr, mStr] = tx.purchaseDate.split('-');
-    const txMonth = parseInt(mStr);
-    const txYear = parseInt(yStr);
-    const matchesMonth = matchMonthFilter(filterMonth, txMonth, txYear);
+    // Month Filter Logic based on installments (recurring transactions repeat every month)
+    const filter = getFilterMonthYear(filterMonth);
+    const matchesMonth = !filter || (tx.installments && tx.installments.some(
+      (inst) => inst.dueMonth === filter.month && inst.dueYear === filter.year
+    ));
 
-    return matchesSearch && matchesCard && matchesCategory && matchesMonth;
+    const matchesStatus = (() => {
+      if (filterStatus === 'all') return true;
+      if (filter) {
+        // Find installment for the filtered month
+        const inst = tx.installments?.find(
+          (i) => i.dueMonth === filter.month && i.dueYear === filter.year
+        );
+        if (!inst) return false;
+        return filterStatus === 'paid' ? inst.status === 'paid' : inst.status !== 'paid';
+      } else {
+        // If "Todo o Período", check if any installment matches the status
+        if (!tx.installments || tx.installments.length === 0) return filterStatus === 'pending';
+        return tx.installments.some(inst => 
+          filterStatus === 'paid' ? inst.status === 'paid' : inst.status !== 'paid'
+        );
+      }
+    })();
+
+    return matchesSearch && matchesCard && matchesCategory && matchesMonth && matchesStatus;
   });
 
   const getTransactionTypeBadge = (tx: Transaction) => {
@@ -482,7 +621,7 @@ export default function TransactionsClient({
       );
     }
     
-    if (type === 'fixed') {
+    if (type === 'fixed' || type === 'fixed_ended') {
       return (
         <span className="inline-flex items-center gap-xs px-2 py-1 rounded-md text-[10px] font-bold select-none bg-secondary/10 text-secondary border border-secondary/20">
           <span className="material-symbols-outlined text-[14px]">repeat</span>
@@ -492,13 +631,14 @@ export default function TransactionsClient({
     }
     
     if (type === 'installments') {
+      const filter = getFilterMonthYear(filterMonth);
       const now = new Date();
-      const currentMonth = now.getMonth() + 1;
-      const currentYear = now.getFullYear();
+      const targetMonth = filter ? filter.month : (now.getMonth() + 1);
+      const targetYear = filter ? filter.year : now.getFullYear();
       
       let text = '';
       const currentInst = tx.installments?.find(
-        (inst) => inst.dueMonth === currentMonth && inst.dueYear === currentYear
+        (inst) => inst.dueMonth === targetMonth && inst.dueYear === targetYear
       );
       if (currentInst) {
         text = `${currentInst.installmentNumber}/${tx.installmentsCount}`;
@@ -523,70 +663,141 @@ export default function TransactionsClient({
   return (
     <div className="space-y-md">
       
-      {/* Top filter bar & Create Button */}
-      <section className="flex flex-wrap items-center gap-md mb-md">
-        <div className="min-w-[180px]">
-          <CustomSelect
-            options={filterCardOptions}
-            value={filterCard}
-            onChange={setFilterCard}
-          />
-        </div>
+      {/* Top header row with add button */}
+      <div className="flex items-center justify-between gap-md mb-md">
+        <h2 className="text-body-lg font-bold text-on-surface flex items-center gap-xs">
+          <span className="material-symbols-outlined text-secondary text-2xl">payments</span>
+          Transações
+        </h2>
 
-        <div className="min-w-[180px]">
-          <CustomSelect
-            options={filterCategoryOptions}
-            value={filterCategory}
-            onChange={setFilterCategory}
-          />
-        </div>
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className="bg-secondary text-on-primary font-label-md text-label-md px-md py-base rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-sm flex items-center gap-xs shrink-0 cursor-pointer h-[42px]"
+        >
+          <span className="material-symbols-outlined text-label-sm">add</span>
+          <span>Registrar Compra</span>
+        </button>
+      </div>
 
-        <div className="min-w-[180px]">
-          <CustomSelect
-            options={monthFilterOptions}
-            value={filterMonth}
-            onChange={setFilterMonth}
-          />
-        </div>
-
-        <div className="flex-grow"></div>
-
-        <div className="relative w-full md:w-auto flex gap-sm">
-          <div className="relative w-full md:w-[250px]">
-            <input 
+      {/* Filters Bar Card */}
+      <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md flex flex-wrap lg:flex-nowrap gap-md items-end shadow-[0_4px_20px_rgba(0,0,0,0.03)] w-full mb-md select-none">
+        {/* Pesquisar column */}
+        <div className="flex-1 min-w-[180px]">
+          <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Pesquisar</label>
+          <div className="relative w-full h-[42px]">
+            <input
               type="text"
               placeholder="Buscar transação..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-surface-container-lowest border border-outline-variant text-label-md font-label-md text-on-surface rounded-lg py-sm pl-xl pr-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm"
+              className="w-full bg-[#EFF1F4] border border-transparent rounded-lg pl-xl pr-md h-full text-label-md font-label-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all duration-200 focus:bg-[#E5E8EC]"
             />
-            <span className="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+            <span className="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
           </div>
-
-          <button
-            onClick={() => setIsOpen(true)}
-            className="bg-secondary text-on-primary font-label-md text-label-md px-md py-base rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-sm flex items-center gap-xs shrink-0 cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-label-sm">add</span>
-            <span>Registrar Compra</span>
-          </button>
         </div>
-      </section>
+
+        {/* Cartão select column */}
+        <div className="flex-1 min-w-[150px] lg:max-w-[200px]">
+          <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Cartão</label>
+          <CustomSelect
+            options={filterCardOptions}
+            value={filterCard}
+            onChange={setFilterCard}
+            variant="filter"
+            hideSelectedIcon={true}
+          />
+        </div>
+
+        {/* Categoria select column */}
+        <div className="flex-1 min-w-[150px] lg:max-w-[200px]">
+          <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Categoria</label>
+          <CustomSelect
+            options={filterCategoryOptions}
+            value={filterCategory}
+            onChange={setFilterCategory}
+            variant="filter"
+            hideSelectedIcon={true}
+          />
+        </div>
+
+        {/* Mês select column */}
+        <div className="flex-1 min-w-[150px] lg:max-w-[200px]">
+          <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Mês</label>
+          <MonthPicker
+            value={filterMonth}
+            onChange={setFilterMonth}
+            variant="filter"
+          />
+        </div>
+
+        {/* Status segmented selector */}
+        <div className="flex-1 min-w-[200px] lg:max-w-[260px]">
+          <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Status</label>
+          <div className="relative inline-flex p-1 bg-[#EFF1F4] border border-transparent rounded-lg h-[42px] items-center w-full select-none">
+            {/* Sliding background indicator */}
+            <div 
+              className="absolute top-1 bottom-1 bg-white rounded-md shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-outline-variant/15 transition-all duration-300 ease-out"
+              style={{
+                width: 'calc((100% - 8px) / 3)',
+                left: filterStatus === 'all' 
+                  ? '4px' 
+                  : filterStatus === 'paid' 
+                    ? 'calc(4px + (100% - 8px) / 3)' 
+                    : 'calc(4px + 2 * (100% - 8px) / 3)'
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setFilterStatus('all')}
+              className={`relative z-10 flex-1 h-full rounded-md text-label-sm font-semibold transition-colors duration-200 select-none cursor-pointer text-center flex items-center justify-center ${
+                filterStatus === 'all'
+                  ? 'text-secondary font-bold'
+                  : 'text-on-surface-variant/70 hover:text-on-surface'
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus('paid')}
+              className={`relative z-10 flex-1 h-full rounded-md text-label-sm font-semibold transition-colors duration-200 select-none cursor-pointer text-center flex items-center justify-center ${
+                filterStatus === 'paid'
+                  ? 'text-secondary font-bold'
+                  : 'text-on-surface-variant/70 hover:text-on-surface'
+              }`}
+            >
+              Pagas
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus('pending')}
+              className={`relative z-10 flex-1 h-full rounded-md text-label-sm font-semibold transition-colors duration-200 select-none cursor-pointer text-center flex items-center justify-center ${
+                filterStatus === 'pending'
+                  ? 'text-secondary font-bold'
+                  : 'text-on-surface-variant/70 hover:text-on-surface'
+              }`}
+            >
+              Pendentes
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Transactions Table */}
       <div className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30">
         <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-surface-container-high bg-surface-container-low text-label-sm font-label-sm text-on-surface-variant select-none">
-                <th className="py-md px-lg font-medium uppercase tracking-wider whitespace-nowrap">Data</th>
-                <th className="py-md px-lg font-medium uppercase tracking-wider whitespace-nowrap">Descrição</th>
-                <th className="py-md px-lg font-medium uppercase tracking-wider whitespace-nowrap">Categoria</th>
-                <th className="py-md px-lg font-medium uppercase tracking-wider whitespace-nowrap">Cartão</th>
-                <th className="py-md px-lg font-medium uppercase tracking-wider text-center whitespace-nowrap">Tipo Transação</th>
-                <th className="py-md px-lg font-medium uppercase tracking-wider text-right whitespace-nowrap">Valor</th>
-                <th className="py-md px-lg font-medium uppercase tracking-wider text-center whitespace-nowrap">Status</th>
-                <th className="py-md px-lg font-medium uppercase tracking-wider text-right whitespace-nowrap">Compartilhado</th>
-                <th className="py-md px-lg text-center whitespace-nowrap">Ações</th>
+                <th className="py-md px-md font-medium uppercase tracking-wider whitespace-nowrap">Data</th>
+                <th className="py-md px-md font-medium uppercase tracking-wider">Descrição</th>
+                <th className="py-md px-md font-medium uppercase tracking-wider whitespace-nowrap">Categoria</th>
+                <th className="py-md px-md font-medium uppercase tracking-wider whitespace-nowrap">Cartão</th>
+                <th className="py-md px-md font-medium uppercase tracking-wider text-center whitespace-nowrap">Tipo Transação</th>
+                <th className="py-md px-md font-medium uppercase tracking-wider text-right whitespace-nowrap">Valor</th>
+                <th className="py-md px-sm font-medium uppercase tracking-wider text-center whitespace-nowrap">Status</th>
+                <th className="py-md px-md font-medium uppercase tracking-wider text-right whitespace-nowrap">Compartilhado</th>
+                <th className="py-md px-sm text-center whitespace-nowrap">Ações</th>
               </tr>
             </thead>
             <tbody className="text-body-md font-body-md text-on-surface divide-y divide-surface-container-high">
@@ -595,15 +806,15 @@ export default function TransactionsClient({
                 return (
                   <React.Fragment key={tx.id}>
                     <tr className="hover:bg-surface-container-low/40 transition-colors">
-                      <td className="py-md px-lg whitespace-nowrap text-on-surface-variant font-medium">
+                      <td className="py-md px-md whitespace-nowrap text-on-surface-variant font-medium">
                         {new Date(tx.purchaseDate).toLocaleDateString('pt-BR')}
                       </td>
-                      <td className="py-md px-lg font-bold text-on-surface whitespace-nowrap">
+                      <td className="py-md px-md font-bold text-on-surface">
                         <div className="flex flex-col">
                           <span>{tx.description}</span>
                         </div>
                       </td>
-                      <td className="py-md px-lg whitespace-nowrap">
+                      <td className="py-md px-md whitespace-nowrap">
                         <span 
                           className="inline-flex items-center gap-xs px-2 py-1 rounded-md text-[10px] font-bold select-none border"
                           style={{ 
@@ -616,7 +827,7 @@ export default function TransactionsClient({
                           {tx.category.name}
                         </span>
                       </td>
-                      <td className="py-md px-lg whitespace-nowrap">
+                      <td className="py-md px-md whitespace-nowrap">
                         <span className="inline-flex items-center gap-xs px-2 py-1 rounded-md bg-primary-container text-on-primary-container text-[10px] font-bold border border-outline-variant/30 select-none uppercase">
                           <span 
                             className="material-symbols-outlined text-[14px]"
@@ -627,30 +838,61 @@ export default function TransactionsClient({
                           {tx.card.name}
                         </span>
                       </td>
-                      <td className="py-md px-lg text-center whitespace-nowrap">
+                      <td className="py-md px-md text-center whitespace-nowrap">
                         {getTransactionTypeBadge(tx)}
                       </td>
-                      <td className="py-md px-lg text-right font-bold text-on-surface whitespace-nowrap">
-                        R$ {tx.amountTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      <td className="py-md px-md text-right font-bold text-on-surface whitespace-nowrap">
+                        R$ {(() => {
+                          const filter = getFilterMonthYear(filterMonth);
+                          if (filter) {
+                            const inst = tx.installments?.find(
+                              i => i.dueMonth === filter.month && i.dueYear === filter.year
+                            );
+                            if (inst) return inst.amount;
+                          }
+                          return tx.amountTotal;
+                        })().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="py-md px-lg text-center whitespace-nowrap">
+                      <td className="py-md px-sm text-center whitespace-nowrap">
                         <span className="material-symbols-outlined text-[20px] text-tertiary-container opacity-85">
                           check_circle
                         </span>
                       </td>
-                      <td className="py-md px-lg text-right whitespace-nowrap">
-                        {tx.splits && tx.splits.length > 0 ? (
-                          <div className="inline-flex flex-col items-end">
-                            <span className="inline-flex items-center gap-xs px-2 py-1 rounded-md bg-secondary-fixed/50 text-on-secondary-fixed-variant text-[10px] font-bold border border-secondary-fixed-dim/20 select-none">
-                              <span className="material-symbols-outlined text-[14px]">call_split</span>
-                              + R$ {tx.splits.reduce((sum, s) => sum + s.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} a receber
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-on-surface-variant opacity-30 select-none">-</span>
-                        )}
+                      <td className="py-md px-md text-right whitespace-nowrap">
+                        {(() => {
+                          const filter = getFilterMonthYear(filterMonth);
+                          if (filter) {
+                            const inst = tx.installments?.find(
+                              i => i.dueMonth === filter.month && i.dueYear === filter.year
+                            );
+                            if (inst && inst.splits && inst.splits.length > 0) {
+                              const instSplitsSum = inst.splits.reduce((sum, s) => sum + s.amount, 0);
+                              return (
+                                <div className="inline-flex flex-col items-end">
+                                  <span className="inline-flex items-center gap-xs px-2 py-1 rounded-md bg-secondary-fixed/50 text-on-secondary-fixed-variant text-[10px] font-bold border border-secondary-fixed-dim/20 select-none">
+                                    <span className="material-symbols-outlined text-[14px]">call_split</span>
+                                    + R$ {instSplitsSum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} a receber
+                                  </span>
+                                </div>
+                              );
+                            }
+                            return <span className="text-on-surface-variant opacity-30 select-none">-</span>;
+                          }
+
+                          if (tx.splits && tx.splits.length > 0) {
+                            return (
+                              <div className="inline-flex flex-col items-end">
+                                <span className="inline-flex items-center gap-xs px-2 py-1 rounded-md bg-secondary-fixed/50 text-on-secondary-fixed-variant text-[10px] font-bold border border-secondary-fixed-dim/20 select-none">
+                                  <span className="material-symbols-outlined text-[14px]">call_split</span>
+                                  + R$ {tx.splits.reduce((sum, s) => sum + s.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} a receber
+                                </span>
+                              </div>
+                            );
+                          }
+                          return <span className="text-on-surface-variant opacity-30 select-none">-</span>;
+                        })()}
                       </td>
-                      <td className="py-md px-lg text-center whitespace-nowrap">
+                      <td className="py-md px-sm text-center whitespace-nowrap">
                         <div className="flex justify-center items-center gap-xs">
                           <button
                             onClick={() => toggleExpand(tx.id)}
@@ -662,7 +904,7 @@ export default function TransactionsClient({
                             </span>
                           </button>
                           <button
-                            onClick={() => handleDeleteTransaction(tx.id)}
+                            onClick={() => handleDeleteClick(tx)}
                             className="p-[6px] text-on-surface-variant hover:text-error hover:bg-error-container/40 rounded-lg transition-colors cursor-pointer"
                             title="Excluir Transação"
                           >
@@ -691,14 +933,19 @@ export default function TransactionsClient({
 
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-sm">
                               {tx.installments
+                                .filter((inst) => {
+                                  const filter = getFilterMonthYear(filterMonth);
+                                  if (!filter) return true;
+                                  return inst.dueMonth === filter.month && inst.dueYear === filter.year;
+                                })
                                 .sort((a, b) => a.installmentNumber - b.installmentNumber)
                                 .map((inst) => (
                                   <div key={inst.id} className="p-sm bg-surface border border-outline-variant/30 rounded-lg flex flex-col justify-between min-h-[90px] space-y-sm">
                                     <div>
                                       <div className="flex justify-between items-center text-[9px] font-semibold">
                                         <span className="text-on-surface-variant font-bold">
-                                          {tx.recurrenceType === 'fixed'
-                                            ? `Mensal Recorrente (${inst.installmentNumber})`
+                                          {(tx.recurrenceType === 'fixed' || tx.recurrenceType === 'fixed_ended')
+                                            ? 'Mensal Recorrente'
                                             : `Parcela ${inst.installmentNumber}/${tx.installmentsCount}`
                                           }
                                         </span>
@@ -984,27 +1231,26 @@ export default function TransactionsClient({
                       </p>
                     ) : (
                       <div className="flex flex-col sm:flex-row gap-sm items-end pt-xs">
-                        <div className="w-full sm:w-1/2 space-y-1">
-                          <span className="text-[9px] font-bold text-on-surface-variant uppercase block">Devedor</span>
+                        <div className="w-full sm:w-1/2">
+                          <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">Devedor</label>
                           <CustomSelect
                             options={debtorOptions}
                             value={selectedDebtorId}
                             onChange={setSelectedDebtorId}
+                            className="h-[42px]"
                           />
                         </div>
                         
-                        <div className="w-full sm:w-5/12 space-y-1">
-                          <span className="text-[9px] font-bold text-on-surface-variant uppercase block">Valor (R$)</span>
+                        <div className="w-full sm:w-5/12">
+                          <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">Valor (R$)</label>
                           <div className="relative">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-xs select-none">R$</span>
+                            <span className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant font-medium select-none text-body-md">R$</span>
                             <input
-                              type="number"
-                              step="0.01"
-                              min="0.01"
+                              type="text"
                               placeholder="0,00"
-                              value={splitDebtorAmount}
-                              onChange={(e) => setSplitDebtorAmount(e.target.value)}
-                              className="w-full pl-7 pr-3 py-1.5 bg-surface border border-outline-variant rounded-lg text-xs text-on-surface outline-none"
+                              value={splitDebtorAmountFormatted}
+                              onChange={(e) => handleSplitAmountChange(e.target.value)}
+                              className="w-full pl-[2.8rem] pr-md py-sm bg-surface border border-outline-variant rounded-lg text-body-md font-body-md text-on-surface outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm transition-all h-[42px]"
                             />
                           </div>
                         </div>
@@ -1012,9 +1258,9 @@ export default function TransactionsClient({
                         <button
                           type="button"
                           onClick={handleAddSplit}
-                          className="w-full sm:w-auto px-3 py-1.5 bg-secondary text-on-secondary rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-xs h-[30px] shadow-sm hover:opacity-90"
+                          className="w-full sm:w-auto px-lg bg-secondary text-on-secondary rounded-lg font-label-md text-label-md transition-all cursor-pointer flex items-center justify-center gap-xs h-[42px] shadow-sm hover:opacity-90 active:scale-95 shrink-0"
                         >
-                          <span className="material-symbols-outlined text-[14px]">add</span>
+                          <span className="material-symbols-outlined text-label-md">add</span>
                           <span>Adicionar</span>
                         </button>
                       </div>
@@ -1049,6 +1295,71 @@ export default function TransactionsClient({
               </div>
             </form>
 
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal para exclusão de despesa recorrente */}
+      {mounted && isDeleteModalOpen && txToDelete && createPortal(
+        <div className="fixed inset-0 bg-primary/45 backdrop-blur-sm z-[110] flex items-center justify-center p-md animate-fade-in">
+          <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-2xl w-full max-w-[480px] p-lg space-y-md">
+            <h3 className="text-headline-sm font-bold text-error flex items-center gap-xs whitespace-normal">
+              <span className="material-symbols-outlined text-error">warning</span>
+              Excluir Despesa Recorrente
+            </h3>
+            
+            <p className="text-body-sm text-on-surface-variant whitespace-normal">
+              A despesa <strong>{txToDelete.description}</strong> é uma assinatura mensal recorrente. Como você deseja realizar a exclusão?
+            </p>
+            
+            <div className="flex flex-col gap-sm pt-sm">
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsDeleteModalOpen(false);
+                  const filter = getFilterMonthYear(filterMonth);
+                  if (filter) {
+                    await handleDeleteTransaction(txToDelete.id, 'future', filter.month, filter.year);
+                  }
+                }}
+                className="w-full py-sm px-md bg-surface border border-outline-variant hover:bg-surface-container-low text-on-surface font-semibold rounded-lg text-xs transition-all text-left flex items-start gap-sm cursor-pointer whitespace-normal"
+              >
+                <span className="material-symbols-outlined text-secondary shrink-0 mt-0.5">arrow_forward</span>
+                <div className="whitespace-normal">
+                  <p className="font-bold text-on-surface text-xs whitespace-normal">Excluir a partir do mês selecionado</p>
+                  <p className="text-[10px] text-on-surface-variant mt-0.5 whitespace-normal">Exclui esta mensalidade e todas as faturas futuras. O histórico de faturas passadas será mantido.</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsDeleteModalOpen(false);
+                  await handleDeleteTransaction(txToDelete.id, 'all');
+                }}
+                className="w-full py-sm px-md bg-error-container/20 border border-error/20 hover:bg-error-container/40 text-on-surface font-semibold rounded-lg text-xs transition-all text-left flex items-start gap-sm cursor-pointer whitespace-normal"
+              >
+                <span className="material-symbols-outlined text-error shrink-0 mt-0.5">delete</span>
+                <div className="whitespace-normal">
+                  <p className="font-bold text-error text-xs whitespace-normal">Excluir tudo (histórico completo)</p>
+                  <p className="text-[10px] text-on-surface-variant mt-0.5 whitespace-normal">Apaga completamente todos os registros desta despesa, incluindo todas as faturas anteriores.</p>
+                </div>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-sm border-t border-outline-variant/20">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setTxToDelete(null);
+                }}
+                className="px-md py-base hover:bg-surface-container-low rounded-lg text-xs font-bold text-on-surface-variant cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>,
         document.body

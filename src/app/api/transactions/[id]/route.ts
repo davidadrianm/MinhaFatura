@@ -14,6 +14,10 @@ export async function DELETE(
     }
 
     const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type') || 'all'; // 'all' or 'future'
+    const monthStr = searchParams.get('month');
+    const yearStr = searchParams.get('year');
 
     const transaction = await prisma.transaction.findFirst({
       where: { id, userId: user.userId },
@@ -26,7 +30,47 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'Transação não encontrada' }, { status: 404 });
     }
 
-    // Guarda os IDs das faturas afetadas pelas parcelas
+    if (type === 'future' && monthStr && yearStr) {
+      const targetMonth = parseInt(monthStr);
+      const targetYear = parseInt(yearStr);
+
+      // Busca as parcelas que vencem no mês/ano alvo em diante
+      const futureInstallments = transaction.installments.filter((inst) => {
+        return (inst.dueYear > targetYear) || (inst.dueYear === targetYear && inst.dueMonth >= targetMonth);
+      });
+
+      const affectedInvoiceIds = Array.from(
+        new Set(
+          futureInstallments
+            .map((inst) => inst.invoiceId)
+            .filter((id): id is string => !!id)
+        )
+      );
+
+      const futureInstallmentIds = futureInstallments.map((inst) => inst.id);
+
+      // Deleta as parcelas futuras (splits e devedores serão apagados em cascata)
+      await prisma.transactionInstallment.deleteMany({
+        where: {
+          id: { in: futureInstallmentIds }
+        }
+      });
+
+      // Altera o tipo de recorrência para 'fixed_ended' para que o ensureRecurringTransactions não gere novas parcelas futuras
+      await prisma.transaction.update({
+        where: { id },
+        data: { recurrenceType: 'fixed_ended' }
+      });
+
+      // Recalcula o valor de todas as faturas afetadas
+      for (const invoiceId of affectedInvoiceIds) {
+        await recalculateInvoiceAmount(invoiceId);
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
+    // Guarda os IDs das faturas afetadas pelas parcelas (deleção completa de tudo)
     const affectedInvoiceIds = Array.from(
       new Set(
         transaction.installments

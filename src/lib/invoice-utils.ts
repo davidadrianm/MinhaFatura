@@ -113,6 +113,18 @@ export async function recalculateInvoiceAmount(invoiceId: string): Promise<numbe
 
   if (!invoice) return 0;
 
+  // Verifica se a fatura ainda possui parcelas. Se não possuir, ela pode ser removida.
+  const installmentsCount = await prisma.transactionInstallment.count({
+    where: { invoiceId }
+  });
+
+  if (installmentsCount === 0) {
+    await prisma.invoice.delete({
+      where: { id: invoiceId }
+    });
+    return 0;
+  }
+
   // Soma todas as parcelas vinculadas a esta fatura
   const aggregate = await prisma.transactionInstallment.aggregate({
     where: {
@@ -256,5 +268,112 @@ export async function createInstallmentsForTransaction(transactionId: string): P
   // Recalcula o valor total de todas as faturas afetadas
   for (const invoiceId of invoiceIdsToRecalculate) {
     await recalculateInvoiceAmount(invoiceId);
+  }
+}
+
+/**
+ * Garante que todas as transações recorrentes ativas tenham sempre um saldo de faturamento de 12 meses futuros,
+ * criando uma nova parcela no final a cada mês que se passa.
+ */
+export async function ensureRecurringTransactions(userId: string): Promise<void> {
+  const now = new Date();
+  const currentMonth = now.getUTCMonth(); // 0-indexed (Jan = 0)
+  const currentYear = now.getUTCFullYear();
+
+  // 1. Busca os cartões ativos do usuário
+  const cards = await prisma.creditCard.findMany({
+    where: { userId, isActive: true },
+    select: { id: true }
+  });
+  const cardIds = cards.map(c => c.id);
+
+  if (cardIds.length === 0) return;
+
+  // 2. Busca todas as transações de recorrência fixa associadas aos cartões ativos
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      userId,
+      recurrenceType: 'fixed',
+      cardId: { in: cardIds },
+    },
+    include: {
+      installments: true,
+      card: true,
+      splits: true,
+    },
+  });
+
+  // 3. Garante um saldo de 12 meses para cada transação recorrente
+  for (const tx of transactions) {
+    const sortedInstallments = [...tx.installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
+    let maxInstallmentNumber = sortedInstallments.length > 0
+      ? sortedInstallments[sortedInstallments.length - 1].installmentNumber
+      : 0;
+
+    // Verifica cada mês na janela de 12 meses (do mês atual em diante)
+    for (let i = 0; i < 12; i++) {
+      const checkDate = new Date(Date.UTC(currentYear, currentMonth + i, 1));
+      const checkMonth = checkDate.getUTCMonth() + 1; // 1-indexed (Jan = 1)
+      const checkYear = checkDate.getUTCFullYear();
+
+      // Verifica se já existe parcela para este mês de vencimento
+      const exists = tx.installments.some(
+        (inst) => inst.dueMonth === checkMonth && inst.dueYear === checkYear
+      );
+
+      if (!exists) {
+        // Incrementa a numeração da parcela
+        maxInstallmentNumber += 1;
+
+        // Determina os detalhes de fatura para a parcela
+        // Usamos uma data simulada de compra baseada no dia de fechamento do cartão neste mês específico
+        const purchaseSimulatedDate = new Date(Date.UTC(checkYear, checkMonth - 1, tx.card.closingDay, 12, 0, 0));
+        const { referenceMonth, referenceYear, closingDate, dueDate } = calculateInvoiceDate(
+          purchaseSimulatedDate,
+          tx.card.closingDay,
+          tx.card.dueDay
+        );
+
+        // Obtém ou cria a fatura para o mês correspondente
+        const invoice = await getOrCreateInvoice(
+          userId,
+          tx.cardId,
+          referenceMonth,
+          referenceYear,
+          closingDate,
+          dueDate
+        );
+
+        // Cria a parcela no banco de dados
+        const installment = await prisma.transactionInstallment.create({
+          data: {
+            userId,
+            cardId: tx.cardId,
+            transactionId: tx.id,
+            invoiceId: invoice.id,
+            installmentNumber: maxInstallmentNumber,
+            amount: tx.amountTotal,
+            dueMonth: checkMonth,
+            dueYear: checkYear,
+            status: invoice.status === 'paid' ? 'paid' : 'pending',
+          },
+        });
+
+        // Cria os splits para esta nova parcela caso a transação seja compartilhada
+        for (const split of tx.splits) {
+          await prisma.installmentSplit.create({
+            data: {
+              installmentId: installment.id,
+              debtorId: split.debtorId,
+              amount: split.amount,
+              paid: false,
+            },
+          });
+        }
+
+        // Recalcula o valor total da fatura
+        await recalculateInvoiceAmount(invoice.id);
+      }
+    }
   }
 }

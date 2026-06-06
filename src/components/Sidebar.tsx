@@ -15,7 +15,7 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
   const menuItems = [
     { name: 'Dashboard', href: '/dashboard', icon: 'dashboard' },
     { name: 'Cartões', href: '/cards', icon: 'credit_card' },
-    { name: 'Transações', href: '/transactions', icon: 'receipt_long' },
+    { name: 'Transações', href: '/transactions', icon: 'receipt' },
     { name: 'Faturas', href: '/invoices', icon: 'calendar_month' },
     { name: 'Categorias', href: '/categories', icon: 'category' },
     { name: 'Gastos Compartilhados', href: '/debtors', icon: 'group' },
@@ -64,10 +64,10 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-md px-sm py-sm rounded-lg transition-all active:scale-[0.98] ${
+                  className={`flex items-center gap-md py-sm rounded-lg transition-all active:scale-[0.98] ${
                     active
-                      ? 'text-secondary font-bold border-r-4 border-secondary bg-surface-container-high'
-                      : 'text-on-surface-variant opacity-70 hover:bg-surface-container-high transition-colors'
+                      ? 'text-secondary font-bold border-l-4 border-secondary bg-secondary/10 pl-[8px] pr-sm'
+                      : 'text-on-surface-variant opacity-70 hover:bg-surface-container-high transition-colors px-sm'
                   }`}
                 >
                   <span
@@ -96,15 +96,19 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
         </button>
 
         {/* Profile Details */}
-        <div className="mt-md px-sm flex items-center gap-sm">
-          <div className="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container border border-outline-variant/30 flex items-center justify-center font-bold text-sm select-none">
+        <Link 
+          href="/profile" 
+          className="mt-md px-sm py-xs flex items-center gap-sm hover:bg-surface-container-high rounded-lg transition-colors cursor-pointer group border border-transparent hover:border-outline-variant/10"
+          title="Ver perfil"
+        >
+          <div className="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container border border-outline-variant/30 flex items-center justify-center font-bold text-sm select-none group-hover:ring-2 group-hover:ring-secondary/40 transition-all">
             {userInitials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-label-md font-label-md text-on-surface truncate">{userName || 'Usuário'}</p>
+            <p className="text-label-md font-label-md text-on-surface truncate group-hover:text-secondary transition-colors font-semibold">{userName || 'Usuário'}</p>
             <p className="text-label-sm font-label-sm text-on-surface-variant truncate">{userEmail || 'email@email.com'}</p>
           </div>
-        </div>
+        </Link>
       </div>
     </aside>
   );

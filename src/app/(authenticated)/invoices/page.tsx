@@ -15,14 +15,10 @@ export default async function InvoicesPage() {
   const currentMonth = now.getMonth() + 1; // 1-indexed (Jan = 1)
   const currentYear = now.getFullYear();
 
-  // Busca todas as faturas do usuário do mês atual em diante, incluindo o cartão e todas as parcelas com splits
+  // Busca todas as faturas do usuário, incluindo o cartão e todas as parcelas com splits
   const invoices = await prisma.invoice.findMany({
     where: { 
-      userId: user.userId,
-      OR: [
-        { referenceYear: { gt: currentYear } },
-        { referenceYear: currentYear, referenceMonth: { gte: currentMonth } }
-      ]
+      userId: user.userId
     },
     include: {
       card: {

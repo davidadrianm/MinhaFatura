@@ -17,6 +17,8 @@ interface CustomSelectProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  variant?: 'default' | 'filter';
+  hideSelectedIcon?: boolean;
 }
 
 export default function CustomSelect({
@@ -26,6 +28,8 @@ export default function CustomSelect({
   placeholder = 'Selecione uma opção...',
   disabled = false,
   className = '',
+  variant = 'default',
+  hideSelectedIcon = false,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [direction, setDirection] = useState<'down' | 'up'>('down');
@@ -104,31 +108,37 @@ export default function CustomSelect({
         type="button"
         disabled={disabled}
         onClick={handleToggle}
-        className={`w-full flex items-center justify-between px-md py-sm bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md text-on-surface outline-none transition-all duration-200 select-none cursor-pointer ${
+        className={`w-full h-full flex items-center justify-between px-md py-sm rounded-lg text-body-md text-on-surface outline-none transition-all duration-200 select-none cursor-pointer ${
+          variant === 'filter'
+            ? 'bg-[#EFF1F4] border border-transparent font-medium h-[42px]'
+            : 'bg-surface-container-lowest border border-outline-variant'
+        } ${
           disabled 
             ? 'opacity-50 cursor-not-allowed bg-surface-container-low' 
             : isOpen 
               ? 'ring-2 ring-secondary/20 border-secondary shadow-[0_0_0_2px_rgba(113,42,226,0.15)]' 
-              : 'hover:border-outline hover:bg-surface-container-low/30'
+              : variant === 'filter'
+                ? 'hover:bg-[#E5E8EC]'
+                : 'hover:border-outline hover:bg-surface-container-low/30'
         }`}
       >
         <div className="flex items-center gap-sm truncate">
           {selectedOption ? (
             <>
               {/* Category Color Dot */}
-              {selectedOption.color && (
+              {selectedOption.color && !hideSelectedIcon && (
                 <span 
                   className="w-2.5 h-2.5 rounded-full shrink-0 shadow-inner" 
                   style={{ backgroundColor: selectedOption.color }} 
                 />
               )}
               {/* Option Icon */}
-              {selectedOption.icon && (
+              {selectedOption.icon && !hideSelectedIcon && (
                 <span className="material-symbols-outlined text-[18px] text-secondary shrink-0">
                   {selectedOption.icon}
                 </span>
               )}
-              <span className="truncate font-medium">{selectedOption.label}</span>
+              <span className="truncate">{selectedOption.label}</span>
               {/* Optional Badge */}
               {selectedOption.badge && (
                 <span className="text-[9px] font-bold bg-surface-container-high px-1.5 py-[2px] rounded uppercase text-on-surface-variant shrink-0">

@@ -42,11 +42,14 @@ export async function DELETE(
       }
     });
 
-    // Verifica se há faturas não pagas ligadas ao cartão
+    // Verifica se há faturas não pagas ligadas ao cartão que possuem parcelas
     const activeInvoicesCount = await prisma.invoice.count({
       where: {
         cardId: id,
-        status: { in: ['open', 'closed', 'overdue'] }
+        status: { in: ['open', 'closed', 'overdue'] },
+        installments: {
+          some: {}
+        }
       }
     });
 

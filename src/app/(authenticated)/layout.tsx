@@ -3,6 +3,7 @@ import { getSessionUser } from '@/lib/auth';
 import Sidebar from '@/components/Sidebar';
 import TopNavBar from '@/components/TopNavBar';
 import BottomNavBar from '@/components/BottomNavBar';
+import { ensureRecurringTransactions } from '@/lib/invoice-utils';
 
 export default async function AuthenticatedLayout({
   children,
@@ -14,6 +15,9 @@ export default async function AuthenticatedLayout({
   if (!user) {
     redirect('/');
   }
+
+  // Garante que as transações recorrentes tenham sempre 12 meses de faturamento futuro
+  await ensureRecurringTransactions(user.userId);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-on-background font-sans">
@@ -27,7 +31,7 @@ export default async function AuthenticatedLayout({
 
         {/* Scrollable Canvas */}
         <main className="flex-1 overflow-y-auto p-grid-margin pb-28 lg:pb-grid-margin bg-background">
-          <div className="max-w-[1280px] mx-auto w-full animate-fade-in">
+          <div className="max-w-[1600px] mx-auto w-full animate-fade-in">
             {children}
           </div>
         </main>

@@ -2,51 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import CustomSelect, { SelectOption } from './CustomSelect';
+import MonthPicker from './MonthPicker';
 
-const getMonthFilterOptions = (): SelectOption[] => {
-  const options: SelectOption[] = [
-    { value: 'all', label: 'Todo o Período', icon: 'date_range' },
-    { value: 'this-month', label: 'Este Mês', icon: 'calendar_today' },
-    { value: 'last-month', label: 'Mês Passado', icon: 'history' },
-    { value: 'next-month', label: 'Próximo Mês', icon: 'arrow_forward' },
-  ];
 
-  const now = new Date();
-  const months = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-  ];
-
-  for (let i = -6; i <= 6; i++) {
-    const d = new Date();
-    d.setMonth(now.getMonth() + i);
-    const m = d.getMonth() + 1;
-    const y = d.getFullYear();
-    const val = `${m.toString().padStart(2, '0')}-${y}`;
-    const label = `${months[m - 1]} de ${y}`;
-    
-    if (i !== 0 && i !== -1 && i !== 1) {
-      options.push({
-        value: val,
-        label,
-        icon: 'calendar_month'
-      });
-    } else {
-      const refIdx = options.findIndex(opt => {
-        if (i === 0 && opt.value === 'this-month') return true;
-        if (i === -1 && opt.value === 'last-month') return true;
-        if (i === 1 && opt.value === 'next-month') return true;
-        return false;
-      });
-      if (refIdx !== -1) {
-        options[refIdx].label = `${options[refIdx].label} (${months[m - 1]}/${y})`;
-      }
-    }
-  }
-
-  return options;
-};
 
 const matchMonthFilter = (filterVal: string, targetMonth: number, targetYear: number) => {
   if (filterVal === 'all') return true;
@@ -73,7 +31,7 @@ const matchMonthFilter = (filterVal: string, targetMonth: number, targetYear: nu
   return targetMonth === m && targetYear === y;
 };
 
-const monthFilterOptions = getMonthFilterOptions();
+
 
 interface TransactionDetail {
   description: string;
@@ -461,59 +419,82 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
               </div>
 
               {/* Filters for Selected Debtor Installments */}
-              <div className="flex flex-col sm:flex-row gap-sm items-start sm:items-center justify-between py-xs border-b border-outline-variant/10 w-full">
-                <div className="flex flex-col sm:flex-row gap-sm items-stretch sm:items-center w-full sm:w-auto">
-                  <div className="relative w-full sm:w-60">
+              <div className="flex flex-wrap md:flex-nowrap gap-md items-end w-full pb-md border-b border-outline-variant/10 select-none">
+                {/* Pesquisar column */}
+                <div className="flex-1 min-w-[180px]">
+                  <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Pesquisar</label>
+                  <div className="relative w-full h-[42px]">
                     <input
                       type="text"
                       placeholder="Buscar por descrição..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full bg-surface border border-outline-variant rounded-lg pl-8 pr-3 py-1 text-label-md text-on-surface outline-none"
+                      className="w-full bg-[#EFF1F4] border border-transparent rounded-lg pl-xl pr-md h-full text-label-md font-label-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all duration-200 focus:bg-[#E5E8EC]"
                     />
-                    <span className="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-on-surface-variant text-[16px]">search</span>
-                  </div>
-                  
-                  <div className="w-full sm:w-48">
-                    <CustomSelect
-                      options={monthFilterOptions}
-                      value={filterMonth}
-                      onChange={setFilterMonth}
-                    />
+                    <span className="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
                   </div>
                 </div>
 
-                <div className="flex gap-xs shrink-0 select-none">
-                  <button
-                    onClick={() => setStatusFilter('all')}
-                    className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all border ${
-                      statusFilter === 'all' 
-                        ? 'bg-secondary text-on-secondary border-transparent' 
-                        : 'bg-surface border-outline-variant text-on-surface-variant hover:bg-surface-container-low'
-                    }`}
-                  >
-                    Todos
-                  </button>
-                  <button
-                    onClick={() => setStatusFilter('pending')}
-                    className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all border ${
-                      statusFilter === 'pending' 
-                        ? 'bg-secondary text-on-secondary border-transparent' 
-                        : 'bg-surface border-outline-variant text-on-surface-variant hover:bg-surface-container-low'
-                    }`}
-                  >
-                    Pendentes
-                  </button>
-                  <button
-                    onClick={() => setStatusFilter('paid')}
-                    className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all border ${
-                      statusFilter === 'paid' 
-                        ? 'bg-secondary text-on-secondary border-transparent' 
-                        : 'bg-surface border-outline-variant text-on-surface-variant hover:bg-surface-container-low'
-                    }`}
-                  >
-                    Recebidos
-                  </button>
+                {/* Mês select column */}
+                <div className="flex-1 min-w-[150px] md:max-w-[200px]">
+                  <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Mês</label>
+                  <MonthPicker
+                    value={filterMonth}
+                    onChange={setFilterMonth}
+                    variant="filter"
+                  />
+                </div>
+
+                {/* Status segmented selector */}
+                <div className="flex-grow min-w-[220px] md:max-w-[280px]">
+                  <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Status</label>
+                  <div className="relative inline-flex p-1 bg-[#EFF1F4] border border-transparent rounded-lg h-[42px] items-center w-full select-none">
+                    {/* Sliding background indicator */}
+                    <div 
+                      className="absolute top-1 bottom-1 bg-white rounded-md shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-outline-variant/15 transition-all duration-300 ease-out"
+                      style={{
+                        width: 'calc((100% - 8px) / 3)',
+                        left: statusFilter === 'all' 
+                          ? '4px' 
+                          : statusFilter === 'pending' 
+                            ? 'calc(4px + (100% - 8px) / 3)' 
+                            : 'calc(4px + 2 * (100% - 8px) / 3)'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter('all')}
+                      className={`relative z-10 flex-1 h-full rounded-md text-label-sm font-semibold transition-colors duration-200 select-none cursor-pointer text-center flex items-center justify-center ${
+                        statusFilter === 'all'
+                          ? 'text-secondary font-bold'
+                          : 'text-on-surface-variant/70 hover:text-on-surface'
+                      }`}
+                    >
+                      Todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter('pending')}
+                      className={`relative z-10 flex-1 h-full rounded-md text-label-sm font-semibold transition-colors duration-200 select-none cursor-pointer text-center flex items-center justify-center ${
+                        statusFilter === 'pending'
+                          ? 'text-secondary font-bold'
+                          : 'text-on-surface-variant/70 hover:text-on-surface'
+                      }`}
+                    >
+                      Pendentes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter('paid')}
+                      className={`relative z-10 flex-1 h-full rounded-md text-label-sm font-semibold transition-colors duration-200 select-none cursor-pointer text-center flex items-center justify-center ${
+                        statusFilter === 'paid'
+                          ? 'text-secondary font-bold'
+                          : 'text-on-surface-variant/70 hover:text-on-surface'
+                      }`}
+                    >
+                      Recebidos
+                    </button>
+                  </div>
                 </div>
               </div>
 

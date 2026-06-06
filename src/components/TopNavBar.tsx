@@ -104,12 +104,13 @@ export default function TopNavBar({ userName }: TopNavBarProps) {
         </Link>
 
         {/* Avatar */}
-        <div 
-          className="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container border border-outline-variant/30 flex items-center justify-center font-bold text-sm select-none"
-          title={userName}
+        <Link 
+          href="/profile"
+          className="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container border border-outline-variant/30 flex items-center justify-center font-bold text-sm select-none hover:ring-2 hover:ring-secondary/50 transition-all cursor-pointer"
+          title="Ver perfil"
         >
           {userInitials}
-        </div>
+        </Link>
       </div>
     </header>
   );
