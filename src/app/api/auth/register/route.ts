@@ -74,6 +74,14 @@ export async function POST(request: Request) {
       path: '/',
     });
 
+    response.cookies.set('theme', 'light', {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 365, // 1 ano
+      path: '/',
+    });
+
     return response;
   } catch (error: any) {
     console.error('Erro no registro:', error);

@@ -429,7 +429,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
                       placeholder="Buscar por descrição..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full bg-[#EFF1F4] border border-transparent rounded-lg pl-xl pr-md h-full text-label-md font-label-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all duration-200 focus:bg-[#E5E8EC]"
+                      className="w-full bg-surface-container-low border border-transparent rounded-lg pl-xl pr-md h-full text-label-md font-label-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all duration-200 focus:bg-surface-container-high"
                     />
                     <span className="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
                   </div>
@@ -448,10 +448,10 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
                 {/* Status segmented selector */}
                 <div className="flex-grow min-w-[220px] md:max-w-[280px]">
                   <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Status</label>
-                  <div className="relative inline-flex p-1 bg-[#EFF1F4] border border-transparent rounded-lg h-[42px] items-center w-full select-none">
+                  <div className="relative inline-flex p-1 bg-surface-container-low border border-transparent rounded-lg h-[42px] items-center w-full select-none">
                     {/* Sliding background indicator */}
                     <div 
-                      className="absolute top-1 bottom-1 bg-white rounded-md shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-outline-variant/15 transition-all duration-300 ease-out"
+                      className="absolute top-1 bottom-1 bg-surface-container-lowest rounded-md shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-outline-variant/15 transition-all duration-300 ease-out"
                       style={{
                         width: 'calc((100% - 8px) / 3)',
                         left: statusFilter === 'all' 

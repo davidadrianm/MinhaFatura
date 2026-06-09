@@ -53,7 +53,7 @@ export default function TopNavBar({ userName }: TopNavBarProps) {
     if (pathname.startsWith('/debtors')) {
       return 'Controle de Recebíveis e reembolsos de despesas divididas.';
     }
-    return 'Premium Digital Vault';
+    return 'Seu melhor gestor de cartão.';
   };
 
   const userInitials = userName
@@ -66,11 +66,11 @@ export default function TopNavBar({ userName }: TopNavBarProps) {
     : 'US';
 
   return (
-    <header className="flex justify-between items-center w-full px-grid-margin py-md bg-surface-container-low dark:bg-inverse-surface border-b border-outline-variant/20 z-40 sticky top-0">
+    <header className="flex justify-between items-center w-full px-grid-margin py-md bg-surface-container-low border-b border-outline-variant/20 z-40 sticky top-0">
       {/* Mobile Title */}
       <div className="flex items-center gap-sm lg:hidden">
         <span className="material-symbols-outlined text-headline-md font-black text-primary">account_balance</span>
-        <h2 className="text-headline-md font-headline-md font-black text-primary">FinVault</h2>
+        <h2 className="text-headline-md font-headline-md font-black text-primary">MinhaFatura</h2>
       </div>
 
       {/* Desktop Title & Subtitle */}

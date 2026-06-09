@@ -57,7 +57,7 @@ export default function LoginPage() {
             <span className="material-symbols-outlined text-[28px] font-bold">account_balance</span>
           </div>
           <h1 className="text-3xl font-black text-primary tracking-tight">
-            FinVault
+            MinhaFatura
           </h1>
           <p className="text-label-sm font-label-sm text-on-surface-variant max-w-[280px]">
             {isLogin 

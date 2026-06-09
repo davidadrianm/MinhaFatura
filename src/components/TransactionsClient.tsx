@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import CustomSelect, { SelectOption } from './CustomSelect';
 import MonthPicker from './MonthPicker';
+import DatePicker from './DatePicker';
+import { formatCalendarDate } from '@/lib/date-utils';
 
 interface CardOption {
   id: string;
@@ -201,6 +203,9 @@ export default function TransactionsClient({
   const [mounted, setMounted] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
+  const [txToEdit, setTxToEdit] = useState<Transaction | null>(null);
+  const [isEditScopeModalOpen, setIsEditScopeModalOpen] = useState(false);
+  const [pendingEditData, setPendingEditData] = useState<any>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -277,7 +282,7 @@ export default function TransactionsClient({
     const headers = ['Data', 'Descrição', 'Categoria', 'Cartão', 'Tipo', 'Valor (R$)', 'Status', 'Compartilhado'];
     
     const rows = filteredTransactions.map(tx => {
-      const dateStr = new Date(tx.purchaseDate).toLocaleDateString('pt-BR');
+      const dateStr = formatCalendarDate(tx.purchaseDate);
       const desc = tx.description;
       const cat = tx.category.name;
       const card = tx.card.name;
@@ -367,18 +372,20 @@ export default function TransactionsClient({
       if (modalBodyRef.current) {
         modalBodyRef.current.scrollTop = 0;
       }
-      setDescription('');
-      setAmountTotal('');
-      setAmountFormatted('');
-      setInstallmentsCount('1');
-      setNotes('');
-      setIsSplit(false);
-      setFormSplits([]);
-      setSplitDebtorAmount('');
-      setSplitDebtorAmountFormatted('');
-      setRecurrenceType('none');
-      setRecurrencePeriod('monthly');
-      setInstallmentStart('1');
+      if (!txToEdit) {
+        setDescription('');
+        setAmountTotal('');
+        setAmountFormatted('');
+        setInstallmentsCount('1');
+        setNotes('');
+        setIsSplit(false);
+        setFormSplits([]);
+        setSplitDebtorAmount('');
+        setSplitDebtorAmountFormatted('');
+        setRecurrenceType('none');
+        setRecurrencePeriod('monthly');
+        setInstallmentStart('1');
+      }
       setError('');
     }
   }, [isOpen]);
@@ -511,6 +518,188 @@ export default function TransactionsClient({
       }
     } catch (err) {
       setError('Erro de conexão.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditClick = (tx: Transaction) => {
+    setTxToEdit(tx);
+    
+    // Set form fields
+    setDescription(tx.description);
+    
+    // Determine the amount based on whether a month filter is active
+    const filter = getFilterMonthYear(filterMonth);
+    let amountVal = tx.amountTotal;
+    let initialSplits = tx.splits || [];
+    
+    if (filter && tx.recurrenceType === 'installments') {
+      const inst = tx.installments?.find(
+        i => i.dueMonth === filter.month && i.dueYear === filter.year
+      );
+      if (inst) {
+        amountVal = inst.amount;
+        initialSplits = inst.splits ? inst.splits.map(s => ({
+          id: s.id,
+          amount: s.amount,
+          debtor: s.debtor,
+        })) : [];
+      }
+    }
+    
+    // Set amount values
+    setAmountTotal(amountVal.toFixed(2));
+    setAmountFormatted(
+      amountVal.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    );
+    
+    setPurchaseDate(tx.purchaseDate);
+    setCardId(tx.card.id);
+    setCategoryId(tx.category.id);
+    setNotes(tx.notes || '');
+    
+    // Splits
+    if (initialSplits.length > 0) {
+      setIsSplit(true);
+      setFormSplits(initialSplits.map(s => ({
+        debtorId: s.debtor.id,
+        name: s.debtor.name,
+        amount: s.amount.toFixed(2),
+      })));
+    } else {
+      setIsSplit(false);
+      setFormSplits([]);
+    }
+    
+    // Recurrence fields (disabled but set for display)
+    setRecurrenceType(tx.recurrenceType || 'none');
+    setRecurrencePeriod(tx.recurrencePeriod || 'monthly');
+    setInstallmentStart((tx.installmentStart || 1).toString());
+    setInstallmentsCount((tx.installmentsCount || 1).toString());
+    
+    // Open modal
+    setIsOpen(true);
+  };
+
+  const handleNewTransactionClick = () => {
+    setTxToEdit(null);
+    setDescription('');
+    setAmountTotal('');
+    setAmountFormatted('');
+    setInstallmentsCount('1');
+    setNotes('');
+    setPurchaseDate(new Date().toISOString().split('T')[0]);
+    setCardId(cards[0]?.id || '');
+    setCategoryId(categories[0]?.id || '');
+    setIsSplit(false);
+    setFormSplits([]);
+    setRecurrenceType('none');
+    setRecurrencePeriod('monthly');
+    setInstallmentStart('1');
+    setError('');
+    setIsOpen(true);
+  };
+
+  const handleSaveEditedTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    const totalVal = parseFloat(amountTotal);
+    if (isNaN(totalVal) || totalVal <= 0) {
+      setError('Por favor, insira um valor total maior que zero.');
+      return;
+    }
+
+    if (isSplit) {
+      if (formSplits.length === 0) {
+        setError('Adicione pelo menos uma divisão.');
+        return;
+      }
+      const splitsSum = formSplits.reduce((sum, s) => sum + parseFloat(s.amount), 0);
+      if (splitsSum > totalVal) {
+        setError('A soma das divisões não pode exceder o valor total da compra.');
+        return;
+      }
+    }
+
+    if (!txToEdit) return;
+
+    // Data to be submitted
+    const editData = {
+      description,
+      amountTotal,
+      cardId,
+      categoryId,
+      notes,
+      splits: isSplit ? formSplits.map(s => ({ debtorId: s.debtorId, amount: s.amount })) : [],
+      isInstallmentLevelValues: getFilterMonthYear(filterMonth) !== null && txToEdit.recurrenceType === 'installments',
+      installmentsCount: txToEdit.recurrenceType === 'installments' ? parseInt(installmentsCount) : undefined,
+      installmentStart: txToEdit.recurrenceType === 'installments' ? parseInt(installmentStart) : undefined,
+    };
+
+    // If the transaction is recurring AND a month filter is active, we must ask for edit scope.
+    // Otherwise, we default to editScope = 'all'.
+    const filter = getFilterMonthYear(filterMonth);
+    const isRecurring = txToEdit.recurrenceType && txToEdit.recurrenceType !== 'none';
+    
+    if (isRecurring && filter) {
+      setPendingEditData(editData);
+      setIsEditScopeModalOpen(true);
+    } else {
+      // Execute edit with 'all' scope
+      await executeEditTransaction(txToEdit.id, {
+        ...editData,
+        editScope: 'all',
+      });
+    }
+  };
+
+  const executeEditTransaction = async (txId: string, dataToSend: any) => {
+    setLoading(true);
+    setError('');
+    try {
+      const filter = getFilterMonthYear(filterMonth);
+      const payload = {
+        ...dataToSend,
+        selectedMonth: filter?.month,
+        selectedYear: filter?.year,
+      };
+
+      const res = await fetch(`/api/transactions/${txId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setError(data.error || 'Erro ao salvar alteração.');
+      } else {
+        // Success
+        setIsOpen(false);
+        setIsEditScopeModalOpen(false);
+        setTxToEdit(null);
+        setPendingEditData(null);
+
+        // Update list
+        const fetchRes = await fetch(`/api/transactions?cardId=${filterCard}&categoryId=${filterCategory}`);
+        const fetchData = await fetchRes.json();
+        if (fetchData.success) {
+          const mapped = fetchData.transactions.map((tx: any) => ({
+            ...tx,
+            purchaseDate: tx.purchaseDate.split('T')[0]
+          }));
+          setTransactions(mapped);
+          router.refresh();
+        }
+      }
+    } catch (err) {
+      setError('Erro de conexão ao salvar alteração.');
     } finally {
       setLoading(false);
     }
@@ -650,7 +839,7 @@ export default function TransactionsClient({
       }
       
       return (
-        <span className="inline-flex items-center gap-xs px-2 py-1 rounded-md text-[10px] font-bold select-none bg-primary-container text-on-primary-container border border-outline-variant/30">
+        <span className="inline-flex items-center gap-xs px-2 py-1 rounded-md text-[10px] font-bold select-none bg-primary-fixed text-on-primary-fixed-variant border border-primary-fixed-dim/30">
           <span className="material-symbols-outlined text-[14px]">date_range</span>
           {text}
         </span>
@@ -672,7 +861,7 @@ export default function TransactionsClient({
 
         <button
           type="button"
-          onClick={() => setIsOpen(true)}
+          onClick={handleNewTransactionClick}
           className="bg-secondary text-on-primary font-label-md text-label-md px-md py-base rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-sm flex items-center gap-xs shrink-0 cursor-pointer h-[42px]"
         >
           <span className="material-symbols-outlined text-label-sm">add</span>
@@ -691,7 +880,7 @@ export default function TransactionsClient({
               placeholder="Buscar transação..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-[#EFF1F4] border border-transparent rounded-lg pl-xl pr-md h-full text-label-md font-label-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all duration-200 focus:bg-[#E5E8EC]"
+              className="w-full bg-surface-container-low border border-transparent rounded-lg pl-xl pr-md h-full text-label-md font-label-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all duration-200 focus:bg-surface-container-high"
             />
             <span className="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
           </div>
@@ -734,10 +923,10 @@ export default function TransactionsClient({
         {/* Status segmented selector */}
         <div className="flex-1 min-w-[200px] lg:max-w-[260px]">
           <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Status</label>
-          <div className="relative inline-flex p-1 bg-[#EFF1F4] border border-transparent rounded-lg h-[42px] items-center w-full select-none">
+          <div className="relative inline-flex p-1 bg-surface-container-low border border-transparent rounded-lg h-[42px] items-center w-full select-none">
             {/* Sliding background indicator */}
             <div 
-              className="absolute top-1 bottom-1 bg-white rounded-md shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-outline-variant/15 transition-all duration-300 ease-out"
+              className="absolute top-1 bottom-1 bg-surface-container-lowest rounded-md shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-outline-variant/15 transition-all duration-300 ease-out"
               style={{
                 width: 'calc((100% - 8px) / 3)',
                 left: filterStatus === 'all' 
@@ -807,7 +996,7 @@ export default function TransactionsClient({
                   <React.Fragment key={tx.id}>
                     <tr className="hover:bg-surface-container-low/40 transition-colors">
                       <td className="py-md px-md whitespace-nowrap text-on-surface-variant font-medium">
-                        {new Date(tx.purchaseDate).toLocaleDateString('pt-BR')}
+                        {formatCalendarDate(tx.purchaseDate)}
                       </td>
                       <td className="py-md px-md font-bold text-on-surface">
                         <div className="flex flex-col">
@@ -828,7 +1017,7 @@ export default function TransactionsClient({
                         </span>
                       </td>
                       <td className="py-md px-md whitespace-nowrap">
-                        <span className="inline-flex items-center gap-xs px-2 py-1 rounded-md bg-primary-container text-on-primary-container text-[10px] font-bold border border-outline-variant/30 select-none uppercase">
+                        <span className="inline-flex items-center gap-xs px-2 py-1 rounded-md bg-surface-container text-on-surface-variant text-[10px] font-bold border border-outline-variant/30 select-none uppercase">
                           <span 
                             className="material-symbols-outlined text-[14px]"
                             style={{ color: tx.card.color || bankPresets[tx.card.bankName] || '#712ae2' }}
@@ -902,6 +1091,13 @@ export default function TransactionsClient({
                             <span className="material-symbols-outlined text-[18px]">
                               {isExpanded ? 'expand_less' : 'expand_more'}
                             </span>
+                          </button>
+                          <button
+                            onClick={() => handleEditClick(tx)}
+                            className="p-[6px] text-on-surface-variant hover:text-secondary hover:bg-surface-container-low rounded-lg transition-colors cursor-pointer"
+                            title="Editar Transação"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">edit</span>
                           </button>
                           <button
                             onClick={() => handleDeleteClick(tx)}
@@ -994,26 +1190,30 @@ export default function TransactionsClient({
 
       {/* Modal Overlay para Nova Transação */}
       {isOpen && mounted && createPortal(
-        <div className="fixed inset-0 bg-primary/45 backdrop-blur-sm z-[100] flex items-start justify-center overflow-y-auto p-md md:p-lg animate-fade-in">
+        <div className="fixed inset-0 bg-black/45 backdrop-blur-sm z-[100] flex items-start justify-center overflow-y-auto p-md md:p-lg animate-fade-in">
           
           {/* Modal Content container — grows naturally with content */}
           <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-2xl w-full max-w-[600px] relative my-auto">
             
-            {/* Header */}
+             {/* Header */}
             <div className="p-lg border-b border-outline-variant/20 rounded-t-xl bg-surface-container-lowest">
               <button 
                 type="button"
-                onClick={() => setIsOpen(false)}
+                onClick={() => { setIsOpen(false); setTxToEdit(null); }}
                 className="absolute top-md right-md text-on-surface-variant hover:bg-surface-container-low rounded-full w-8 h-8 flex items-center justify-center transition-colors cursor-pointer z-10"
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
-              <h3 className="text-headline-md font-headline-md text-primary font-bold">Nova Transação</h3>
-              <p className="text-label-md font-label-md text-on-surface-variant mt-xs">Registre um novo gasto manual ou compartilhado.</p>
+              <h3 className="text-headline-md font-headline-md text-primary font-bold">
+                {txToEdit ? 'Editar Transação' : 'Nova Transação'}
+              </h3>
+              <p className="text-label-md font-label-md text-on-surface-variant mt-xs">
+                {txToEdit ? 'Altere as informações desta transação.' : 'Registre um novo gasto manual ou compartilhado.'}
+              </p>
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleAddTransaction}>
+            <form onSubmit={txToEdit ? handleSaveEditedTransaction : handleAddTransaction}>
               {/* Fields area */}
               <div ref={modalBodyRef} className="p-lg flex flex-col gap-md">
                 
@@ -1057,12 +1257,10 @@ export default function TransactionsClient({
                   {/* Data */}
                   <div>
                     <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">Data</label>
-                    <input 
-                      type="date" 
-                      required
+                    <DatePicker 
                       value={purchaseDate}
-                      onChange={(e) => setPurchaseDate(e.target.value)}
-                      className="w-full bg-surface border border-outline-variant text-body-md font-body-md text-on-surface rounded-lg py-sm px-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm"
+                      onChange={setPurchaseDate}
+                      disabled={txToEdit !== null}
                     />
                   </div>
 
@@ -1097,6 +1295,7 @@ export default function TransactionsClient({
                       options={recurrenceTypeOptions}
                       value={recurrenceType}
                       onChange={setRecurrenceType}
+                      disabled={txToEdit !== null}
                     />
                   </div>
 
@@ -1113,7 +1312,7 @@ export default function TransactionsClient({
                           required
                           value={installmentsCount}
                           onChange={(e) => setInstallmentsCount(e.target.value)}
-                          className="w-full bg-surface border border-outline-variant text-body-md font-body-md text-on-surface rounded-lg py-sm px-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm"
+                          className="w-full bg-surface border border-outline-variant text-body-md font-body-md text-on-surface rounded-lg py-sm px-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-surface-container-low"
                         />
                       </div>
 
@@ -1124,6 +1323,7 @@ export default function TransactionsClient({
                           options={recurrencePeriodOptions}
                           value={recurrencePeriod}
                           onChange={setRecurrencePeriod}
+                          disabled={txToEdit !== null}
                         />
                       </div>
 
@@ -1137,7 +1337,7 @@ export default function TransactionsClient({
                           required
                           value={installmentStart}
                           onChange={(e) => setInstallmentStart(e.target.value)}
-                          className="w-full bg-surface border border-outline-variant text-body-md font-body-md text-on-surface rounded-lg py-sm px-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm"
+                          className="w-full bg-surface border border-outline-variant text-body-md font-body-md text-on-surface rounded-lg py-sm px-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-surface-container-low"
                         />
                       </div>
                     </div>
@@ -1273,7 +1473,7 @@ export default function TransactionsClient({
               <div className="p-lg border-t border-outline-variant/20 bg-surface-container-low flex justify-end gap-md rounded-b-xl">
                 <button 
                   type="button"
-                  onClick={() => setIsOpen(false)}
+                  onClick={() => { setIsOpen(false); setTxToEdit(null); }}
                   className="px-lg py-sm text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-highest rounded-lg transition-colors cursor-pointer"
                 >
                   Cancelar
@@ -1302,7 +1502,7 @@ export default function TransactionsClient({
 
       {/* Modal para exclusão de despesa recorrente */}
       {mounted && isDeleteModalOpen && txToDelete && createPortal(
-        <div className="fixed inset-0 bg-primary/45 backdrop-blur-sm z-[110] flex items-center justify-center p-md animate-fade-in">
+        <div className="fixed inset-0 bg-black/45 backdrop-blur-sm z-[110] flex items-center justify-center p-md animate-fade-in">
           <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-2xl w-full max-w-[480px] p-lg space-y-md">
             <h3 className="text-headline-sm font-bold text-error flex items-center gap-xs whitespace-normal">
               <span className="material-symbols-outlined text-error">warning</span>
@@ -1358,6 +1558,89 @@ export default function TransactionsClient({
                 className="px-md py-base hover:bg-surface-container-low rounded-lg text-xs font-bold text-on-surface-variant cursor-pointer transition-colors"
               >
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal para seleção do escopo de edição de despesa recorrente */}
+      {mounted && isEditScopeModalOpen && txToEdit && pendingEditData && createPortal(
+        <div className="fixed inset-0 bg-black/45 backdrop-blur-sm z-[110] flex items-center justify-center p-md animate-fade-in">
+          <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-2xl w-full max-w-[480px] p-lg space-y-md">
+            <h3 className="text-headline-sm font-bold text-primary flex items-center gap-xs whitespace-normal">
+              <span className="material-symbols-outlined text-primary">edit_square</span>
+              Editar Transação Recorrente
+            </h3>
+            
+            <p className="text-body-sm text-on-surface-variant whitespace-normal">
+              A transação <strong>{txToEdit.description}</strong> é recorrente. Como você deseja aplicar as alterações feitas?
+            </p>
+            
+            <div className="flex flex-col gap-sm pt-sm">
+              <button
+                type="button"
+                onClick={async () => {
+                  await executeEditTransaction(txToEdit.id, {
+                    ...pendingEditData,
+                    editScope: 'only_this',
+                  });
+                }}
+                className="w-full py-sm px-md bg-surface border border-outline-variant hover:bg-surface-container-low text-on-surface font-semibold rounded-lg text-xs transition-all text-left flex items-start gap-sm cursor-pointer whitespace-normal animate-fade-in"
+              >
+                <span className="material-symbols-outlined text-secondary shrink-0 mt-0.5">event</span>
+                <div className="whitespace-normal">
+                  <p className="font-bold text-on-surface text-xs whitespace-normal">Apenas esta parcela</p>
+                  <p className="text-[10px] text-on-surface-variant mt-0.5 whitespace-normal">Aplica as alterações somente a este mês selecionado ({getFilterMonthYear(filterMonth)?.month.toString().padStart(2, '0')}/{getFilterMonthYear(filterMonth)?.year}). Outros meses não serão afetados.</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await executeEditTransaction(txToEdit.id, {
+                    ...pendingEditData,
+                    editScope: 'from_this_forward',
+                  });
+                }}
+                className="w-full py-sm px-md bg-surface border border-outline-variant hover:bg-surface-container-low text-on-surface font-semibold rounded-lg text-xs transition-all text-left flex items-start gap-sm cursor-pointer whitespace-normal animate-fade-in"
+              >
+                <span className="material-symbols-outlined text-secondary shrink-0 mt-0.5">arrow_forward</span>
+                <div className="whitespace-normal">
+                  <p className="font-bold text-on-surface text-xs whitespace-normal">Daqui em diante</p>
+                  <p className="text-[10px] text-on-surface-variant mt-0.5 whitespace-normal">Aplica as alterações para este mês e todos os meses futuros. As parcelas anteriores serão preservadas.</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await executeEditTransaction(txToEdit.id, {
+                    ...pendingEditData,
+                    editScope: 'all',
+                  });
+                }}
+                className="w-full py-sm px-md bg-surface border border-outline-variant hover:bg-surface-container-low text-on-surface font-semibold rounded-lg text-xs transition-all text-left flex items-start gap-sm cursor-pointer whitespace-normal animate-fade-in"
+              >
+                <span className="material-symbols-outlined text-secondary shrink-0 mt-0.5">all_inclusive</span>
+                <div className="whitespace-normal">
+                  <p className="font-bold text-on-surface text-xs whitespace-normal">Todas as parcelas</p>
+                  <p className="text-[10px] text-on-surface-variant mt-0.5 whitespace-normal">Aplica as alterações a todo o histórico de parcelas desta transação (passadas e futuras).</p>
+                </div>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-sm border-t border-outline-variant/20">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditScopeModalOpen(false);
+                  setPendingEditData(null);
+                }}
+                className="px-md py-base hover:bg-surface-container-low rounded-lg text-xs font-bold text-on-surface-variant cursor-pointer transition-colors"
+              >
+                Voltar ao formulário
               </button>
             </div>
           </div>

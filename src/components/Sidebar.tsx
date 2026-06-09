@@ -51,8 +51,8 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
         <div className="flex items-center gap-sm mb-xl px-sm">
           <span className="material-symbols-outlined text-headline-md text-primary font-bold">account_balance</span>
           <div>
-            <h1 className="text-headline-md font-headline-md font-bold text-primary tracking-tight">FinVault</h1>
-            <p className="text-label-sm font-label-sm text-on-surface-variant">Premium Digital Vault</p>
+            <h1 className="text-headline-md font-headline-md font-bold text-primary tracking-tight">MinhaFatura</h1>
+            <p className="text-label-sm font-label-sm text-on-surface-variant">Seu melhor gestor de cartão.</p>
           </div>
         </div>
 

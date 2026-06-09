@@ -162,12 +162,12 @@ export async function createInstallmentsForTransaction(transactionId: string): P
 
   if (!transaction) throw new Error('Transação não encontrada');
 
-  const { 
-    installmentsCount, 
-    amountTotal, 
-    userId, 
-    cardId, 
-    purchaseDate, 
+  const {
+    installmentsCount,
+    amountTotal,
+    userId,
+    cardId,
+    purchaseDate,
     card,
     recurrenceType = 'none',
     recurrencePeriod = 'monthly',
@@ -177,20 +177,20 @@ export async function createInstallmentsForTransaction(transactionId: string): P
   const isFixed = recurrenceType === 'fixed';
 
   // Calcula valores de cada parcela (lidando com arredondamento de centavos)
-  const baseInstallmentAmount = isFixed 
-    ? amountTotal 
+  const baseInstallmentAmount = isFixed
+    ? amountTotal
     : Math.round((amountTotal / installmentsCount) * 100) / 100;
-  const lastInstallmentAmount = isFixed 
-    ? amountTotal 
+  const lastInstallmentAmount = isFixed
+    ? amountTotal
     : Math.round((amountTotal - (baseInstallmentAmount * (installmentsCount - 1))) * 100) / 100;
 
   // Prepara os valores de split por devedor por parcela (com tratamento de arredondamento)
   const splitsInfo = transaction.splits.map(split => {
-    const baseSplitAmount = isFixed 
-      ? split.amount 
+    const baseSplitAmount = isFixed
+      ? split.amount
       : Math.round((split.amount / installmentsCount) * 100) / 100;
-    const lastSplitAmount = isFixed 
-      ? split.amount 
+    const lastSplitAmount = isFixed
+      ? split.amount
       : Math.round((split.amount - (baseSplitAmount * (installmentsCount - 1))) * 100) / 100;
     return {
       debtorId: split.debtorId,
@@ -310,11 +310,25 @@ export async function ensureRecurringTransactions(userId: string): Promise<void>
       ? sortedInstallments[sortedInstallments.length - 1].installmentNumber
       : 0;
 
+    // Calcula o mês e ano de início com base na data de compra da transação
+    const startDetails = calculateInvoiceDate(
+      tx.purchaseDate,
+      tx.card.closingDay,
+      tx.card.dueDay
+    );
+    const startMonth = startDetails.referenceMonth;
+    const startYear = startDetails.referenceYear;
+
     // Verifica cada mês na janela de 12 meses (do mês atual em diante)
     for (let i = 0; i < 12; i++) {
       const checkDate = new Date(Date.UTC(currentYear, currentMonth + i, 1));
       const checkMonth = checkDate.getUTCMonth() + 1; // 1-indexed (Jan = 1)
       const checkYear = checkDate.getUTCFullYear();
+
+      // Evita criar parcelas para meses anteriores ao início/compra da transação
+      if (checkYear < startYear || (checkYear === startYear && checkMonth < startMonth)) {
+        continue;
+      }
 
       // Verifica se já existe parcela para este mês de vencimento
       const exists = tx.installments.some(

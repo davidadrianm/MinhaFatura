@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CustomSelect, { SelectOption } from './CustomSelect';
 import MonthPicker from './MonthPicker';
+import { formatCalendarDate } from '@/lib/date-utils';
 
 const statusOptions: SelectOption[] = [
   { value: 'all', label: 'Todos os Status', icon: 'filter_list' },
@@ -415,10 +416,10 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
         {/* Status segmented selector */}
         <div className="flex-grow min-w-[280px]">
           <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Status</label>
-          <div className="relative inline-flex p-1 bg-[#EFF1F4] border border-transparent rounded-lg h-[42px] items-center w-full select-none overflow-x-auto">
+          <div className="relative inline-flex p-1 bg-surface-container-low border border-transparent rounded-lg h-[42px] items-center w-full select-none overflow-x-auto">
             {/* Sliding background indicator */}
             <div 
-              className="absolute top-1 bottom-1 bg-white rounded-md shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-outline-variant/15 transition-all duration-300 ease-out"
+              className="absolute top-1 bottom-1 bg-surface-container-lowest rounded-md shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-outline-variant/15 transition-all duration-300 ease-out"
               style={{
                 width: 'calc((100% - 8px) / 5)',
                 left: filterStatus === 'all' 
@@ -450,11 +451,11 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
         </div>
 
         {/* Export CSV button column */}
-        <div className="ml-auto shrink-0 pb-[2px]">
+        <div className="ml-auto shrink-0">
           <button
             type="button"
             onClick={handleExportCSV}
-            className="h-[38px] px-md text-secondary hover:bg-secondary/5 font-label-md text-label-md transition-colors rounded-lg flex items-center justify-center gap-xs cursor-pointer select-none"
+            className="h-[42px] px-md text-secondary hover:bg-secondary/5 font-label-md text-label-md transition-colors rounded-lg flex items-center justify-center gap-xs cursor-pointer select-none"
           >
             <span className="material-symbols-outlined text-[20px]">download</span>
             <span>Exportar CSV</span>
@@ -582,7 +583,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
                               <div className="min-w-0">
                                 <p className="font-bold text-on-surface truncate">{inst.transaction.description}</p>
                                 <p className="text-[9px] text-on-surface-variant mt-0.5">
-                                  Compra em: {new Date(inst.transaction.purchaseDate).toLocaleDateString('pt-BR')} • {inst.transaction.category.name}
+                                  Compra em: {formatCalendarDate(inst.transaction.purchaseDate)} • {inst.transaction.category.name}
                                 </p>
                               </div>
                             </div>

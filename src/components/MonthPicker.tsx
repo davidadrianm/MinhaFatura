@@ -121,18 +121,6 @@ export default function MonthPicker({
     setTempYear(prev => prev + 1);
   };
 
-  const handleApply = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const formattedMonth = tempMonth.toString().padStart(2, '0');
-    onChange(`${formattedMonth}-${tempYear}`);
-    setIsOpen(false);
-  };
-
-  const handleCancel = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsOpen(false);
-  };
-
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
     onChange('all');
@@ -171,6 +159,10 @@ export default function MonthPicker({
       : `${getMonthName(m)} de ${y}`;
   };
 
+  const nowForCurrent = new Date();
+  const realCurrentMonth = nowForCurrent.getMonth() + 1;
+  const realCurrentYear = nowForCurrent.getFullYear();
+
   return (
     <div ref={containerRef} className={`relative w-full ${className}`}>
       {/* Trigger Button */}
@@ -180,7 +172,7 @@ export default function MonthPicker({
         onClick={handleToggle}
         className={`w-full flex items-center justify-between px-md py-sm rounded-lg text-body-md text-on-surface outline-none transition-all duration-200 select-none cursor-pointer ${
           variant === 'filter'
-            ? 'bg-[#EFF1F4] border border-transparent font-medium font-semibold h-[42px]'
+            ? 'bg-surface-container-low border border-transparent font-medium font-semibold h-[42px]'
             : 'bg-surface-container-lowest border border-outline-variant'
         } ${
           disabled
@@ -188,7 +180,7 @@ export default function MonthPicker({
             : isOpen
               ? 'ring-2 ring-secondary/20 border-secondary shadow-[0_0_0_2px_rgba(113,42,226,0.15)]'
               : variant === 'filter'
-                ? 'hover:bg-[#E5E8EC]'
+                ? 'hover:bg-surface-container-high'
                 : 'hover:border-outline hover:bg-surface-container-low/30'
         }`}
       >
@@ -234,6 +226,8 @@ export default function MonthPicker({
             {monthsShort.map((monthLabel, index) => {
               const monthNum = index + 1;
               const isSelected = tempMonth === monthNum;
+              const isRealCurrentMonth = tempYear === realCurrentYear && monthNum === realCurrentMonth;
+
               return (
                 <button
                   key={monthLabel}
@@ -241,14 +235,24 @@ export default function MonthPicker({
                   onClick={(e) => {
                     e.stopPropagation();
                     setTempMonth(monthNum);
+                    const formattedMonth = monthNum.toString().padStart(2, '0');
+                    onChange(`${formattedMonth}-${tempYear}`);
+                    setIsOpen(false);
                   }}
-                  className={`py-sm rounded-xl text-label-md font-semibold text-center select-none cursor-pointer transition-all duration-150 ${
+                  className={`py-xs min-h-[48px] rounded-xl text-label-md font-semibold text-center select-none cursor-pointer transition-all duration-150 flex flex-col items-center justify-center ${
                     isSelected
                       ? 'bg-secondary text-on-secondary font-bold shadow-[0_2px_8px_rgba(113,42,226,0.25)]'
-                      : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/70'
+                      : isRealCurrentMonth
+                        ? 'text-secondary bg-secondary/5 border border-secondary/35 hover:bg-secondary/15'
+                        : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/70'
                   }`}
                 >
-                  {monthLabel}
+                  <span>{monthLabel}</span>
+                  {isRealCurrentMonth && (
+                    <span className={`text-[8px] font-bold tracking-wider mt-[1px] uppercase ${isSelected ? 'text-on-secondary/80' : 'text-secondary/80'}`}>
+                      Atual
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -264,22 +268,22 @@ export default function MonthPicker({
             >
               Todo o Período
             </button>
-            <div className="flex gap-xs shrink-0">
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="px-sm py-base hover:bg-surface-container-low rounded-lg text-xs font-semibold text-on-surface-variant cursor-pointer transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleApply}
-                className="px-md py-base bg-primary text-on-primary rounded-lg text-xs font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer shadow-sm"
-              >
-                Aplicar
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                const now = new Date();
+                const curMonth = (now.getMonth() + 1).toString().padStart(2, '0');
+                const curYear = now.getFullYear();
+                setTempMonth(now.getMonth() + 1);
+                setTempYear(curYear);
+                onChange(`${curMonth}-${curYear}`);
+                setIsOpen(false);
+              }}
+              className="px-md py-base bg-secondary text-on-secondary rounded-lg text-xs font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer shadow-sm shrink-0"
+            >
+              Mês Atual
+            </button>
           </div>
         </div>
       )}

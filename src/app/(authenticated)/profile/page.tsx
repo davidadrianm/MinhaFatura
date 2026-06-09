@@ -21,7 +21,7 @@ export default function ProfilePage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'info' | 'security' | 'reset'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'appearance' | 'security' | 'reset'>('info');
 
   // Form states for profile info
   const [name, setName] = useState('');
@@ -29,6 +29,11 @@ export default function ProfilePage() {
   const [infoLoading, setInfoLoading] = useState(false);
   const [infoError, setInfoError] = useState('');
   const [infoSuccess, setInfoSuccess] = useState('');
+
+  // Form states for appearance
+  const [selectedTheme, setSelectedTheme] = useState<'light' | 'dark' | 'system'>('light');
+  const [themeError, setThemeError] = useState('');
+  const [themeSuccess, setThemeSuccess] = useState('');
 
   // Form states for password change
   const [currentPassword, setCurrentPassword] = useState('');
@@ -64,6 +69,7 @@ export default function ProfilePage() {
         setStats(data.stats);
         setName(data.user.name);
         setEmail(data.user.email);
+        setSelectedTheme(data.user.theme || 'light');
       } else {
         console.error('Erro ao buscar perfil:', data.error);
       }
@@ -71,6 +77,38 @@ export default function ProfilePage() {
       console.error('Erro de conexão ao buscar perfil:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveTheme = async (themeValue: 'light' | 'dark' | 'system') => {
+    setSelectedTheme(themeValue);
+    setThemeError('');
+    setThemeSuccess('');
+
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme: themeValue }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setThemeError(data.error || 'Erro ao atualizar tema de preferência.');
+      } else {
+        setThemeSuccess('Preferência de tema salva com sucesso!');
+        // Update client-side class instantly
+        if (themeValue === 'dark' || (themeValue === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+        
+        // Also update cookie directly via JS
+        document.cookie = `theme=${themeValue}; path=/; max-age=${60 * 60 * 24 * 365}`;
+      }
+    } catch (err) {
+      setThemeError('Erro de conexão ao salvar tema.');
     }
   };
 
@@ -292,6 +330,17 @@ export default function ProfilePage() {
             Dados Pessoais
           </button>
           <button
+            onClick={() => setActiveTab('appearance')}
+            className={`flex-1 py-md px-lg text-label-md font-label-md text-center border-b-2 font-bold cursor-pointer transition-all flex items-center justify-center gap-xs select-none ${
+              activeTab === 'appearance'
+                ? 'border-secondary text-secondary bg-surface-container-lowest'
+                : 'border-transparent text-on-surface-variant opacity-75 hover:bg-surface-container-high/40'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[20px]">palette</span>
+            Aparência
+          </button>
+          <button
             onClick={() => setActiveTab('security')}
             className={`flex-1 py-md px-lg text-label-md font-label-md text-center border-b-2 font-bold cursor-pointer transition-all flex items-center justify-center gap-xs select-none ${
               activeTab === 'security'
@@ -381,6 +430,95 @@ export default function ProfilePage() {
                 </button>
               </div>
             </form>
+          )}
+
+          {/* Aba 2: Aparência (Tema) */}
+          {activeTab === 'appearance' && (
+            <div className="space-y-md animate-fade-in">
+              <div className="space-y-1">
+                <h3 className="text-headline-sm font-bold text-on-surface">Aparência do Sistema</h3>
+                <p className="text-label-md text-on-surface-variant">Escolha o seu tema padrão para navegação no MinhaFatura.</p>
+              </div>
+
+              {themeSuccess && (
+                <div className="bg-tertiary-container/30 text-on-tertiary-container text-xs px-4 py-3 rounded-lg border border-tertiary-container flex items-center gap-xs animate-fade-in">
+                  <span className="material-symbols-outlined text-base">check_circle</span>
+                  <span>{themeSuccess}</span>
+                </div>
+              )}
+
+              {themeError && (
+                <div className="bg-error-container text-on-error-container text-xs px-4 py-3 rounded-lg border border-error/10 flex items-center gap-xs animate-fade-in">
+                  <span className="material-symbols-outlined text-base">error</span>
+                  <span>{themeError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-md pt-sm">
+                {/* Tema Claro */}
+                <button
+                  type="button"
+                  onClick={() => handleSaveTheme('light')}
+                  className={`p-lg border rounded-xl flex flex-col items-center gap-sm cursor-pointer select-none transition-all duration-200 text-center ${
+                    selectedTheme === 'light'
+                      ? 'border-secondary bg-secondary/5 ring-1 ring-secondary'
+                      : 'border-outline-variant/35 hover:bg-surface-container-low/40'
+                  }`}
+                >
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                    selectedTheme === 'light' ? 'bg-secondary text-on-secondary' : 'bg-surface-container text-on-surface-variant'
+                  }`}>
+                    <span className="material-symbols-outlined text-[24px]">light_mode</span>
+                  </div>
+                  <div>
+                    <span className="block text-label-md font-bold text-on-surface">Modo Claro</span>
+                    <span className="block text-label-sm text-on-surface-variant mt-xs">Aparência padrão com fundo claro e alto contraste de leitura.</span>
+                  </div>
+                </button>
+
+                {/* Tema Escuro */}
+                <button
+                  type="button"
+                  onClick={() => handleSaveTheme('dark')}
+                  className={`p-lg border rounded-xl flex flex-col items-center gap-sm cursor-pointer select-none transition-all duration-200 text-center ${
+                    selectedTheme === 'dark'
+                      ? 'border-secondary bg-secondary/5 ring-1 ring-secondary'
+                      : 'border-outline-variant/35 hover:bg-surface-container-low/40'
+                  }`}
+                >
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                    selectedTheme === 'dark' ? 'bg-secondary text-on-secondary' : 'bg-surface-container text-on-surface-variant'
+                  }`}>
+                    <span className="material-symbols-outlined text-[24px]">dark_mode</span>
+                  </div>
+                  <div>
+                    <span className="block text-label-md font-bold text-on-surface">Modo Escuro</span>
+                    <span className="block text-label-sm text-on-surface-variant mt-xs">Aparência escura, ideal para ambientes de baixa iluminação.</span>
+                  </div>
+                </button>
+
+                {/* Tema do Sistema */}
+                <button
+                  type="button"
+                  onClick={() => handleSaveTheme('system')}
+                  className={`p-lg border rounded-xl flex flex-col items-center gap-sm cursor-pointer select-none transition-all duration-200 text-center ${
+                    selectedTheme === 'system'
+                      ? 'border-secondary bg-secondary/5 ring-1 ring-secondary'
+                      : 'border-outline-variant/35 hover:bg-surface-container-low/40'
+                  }`}
+                >
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                    selectedTheme === 'system' ? 'bg-secondary text-on-secondary' : 'bg-surface-container text-on-surface-variant'
+                  }`}>
+                    <span className="material-symbols-outlined text-[24px]">desktop_windows</span>
+                  </div>
+                  <div>
+                    <span className="block text-label-md font-bold text-on-surface">Usar Sistema</span>
+                    <span className="block text-label-sm text-on-surface-variant mt-xs">Sincroniza automaticamente a aparência com o tema do seu dispositivo.</span>
+                  </div>
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Aba 2: Segurança & Senha */}
@@ -615,7 +753,7 @@ export default function ProfilePage() {
 
       {/* Modal de confirmação extra de segurança para Zerar Dados */}
       {isResetModalOpen && (
-        <div className="fixed inset-0 bg-primary/45 backdrop-blur-sm z-[110] flex items-center justify-center p-md animate-fade-in select-none">
+        <div className="fixed inset-0 bg-black/45 backdrop-blur-sm z-[110] flex items-center justify-center p-md animate-fade-in select-none">
           <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-2xl w-full max-w-[480px] p-lg space-y-md">
             
             <h3 className="text-headline-sm font-bold text-error flex items-center gap-xs whitespace-normal">

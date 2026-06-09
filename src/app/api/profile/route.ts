@@ -15,6 +15,7 @@ export async function GET() {
         id: true,
         name: true,
         email: true,
+        theme: true,
         createdAt: true,
       },
     });
@@ -54,7 +55,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
     }
 
-    const { name, email, currentPassword, newPassword } = await request.json();
+    const { name, email, currentPassword, newPassword, theme } = await request.json();
 
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
@@ -64,7 +65,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: 'Usuário não encontrado' }, { status: 404 });
     }
 
-    const updateData: { name?: string; email?: string; password?: string } = {};
+    const updateData: { name?: string; email?: string; password?: string; theme?: string } = {};
 
     // 1. Atualização de dados pessoais
     if (name) updateData.name = name;
@@ -82,7 +83,18 @@ export async function PUT(request: Request) {
       updateData.email = email;
     }
 
-    // 2. Alteração de senha
+    // 2. Preferência de tema
+    if (theme) {
+      if (!['light', 'dark', 'system'].includes(theme)) {
+        return NextResponse.json(
+          { success: false, error: 'Tema inválido' },
+          { status: 400 }
+        );
+      }
+      updateData.theme = theme;
+    }
+
+    // 3. Alteração de senha
     if (currentPassword && newPassword) {
       if (!comparePassword(currentPassword, user.password)) {
         return NextResponse.json(
@@ -121,6 +133,7 @@ export async function PUT(request: Request) {
         id: updatedUser.id,
         name: updatedUser.name,
         email: updatedUser.email,
+        theme: updatedUser.theme,
         createdAt: updatedUser.createdAt,
       },
     });
@@ -133,6 +146,17 @@ export async function PUT(request: Request) {
       maxAge: 60 * 60 * 24 * 7, // 7 dias
       path: '/',
     });
+
+    // Define o cookie de tema
+    if (updatedUser.theme) {
+      response.cookies.set('theme', updatedUser.theme, {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 365, // 1 ano
+        path: '/',
+      });
+    }
 
     return response;
   } catch (error) {

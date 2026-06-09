@@ -1,6 +1,7 @@
 import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
+import { formatCalendarDate } from '@/lib/date-utils';
 
 export const revalidate = 0; // Evita cache em desenvolvimento
 
@@ -587,7 +588,7 @@ export default async function DashboardPage() {
                   <div className="flex items-center gap-xs mt-0.5 text-label-sm text-on-surface-variant">
                     <span className="truncate">{tx.category.name}</span>
                     <span>•</span>
-                    <span>{new Date(tx.purchaseDate).toLocaleDateString('pt-BR')}</span>
+                    <span>{formatCalendarDate(tx.purchaseDate)}</span>
                   </div>
                 </div>
               </div>

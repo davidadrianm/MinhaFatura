@@ -100,7 +100,7 @@ export default function CustomSelect({
   return (
     <div 
       ref={containerRef} 
-      className={`relative w-full ${className}`}
+      className={`relative w-full ${variant === 'filter' ? 'h-[42px]' : ''} ${className}`}
       onKeyDown={handleKeyDown}
     >
       {/* Select Trigger Button */}
@@ -110,7 +110,7 @@ export default function CustomSelect({
         onClick={handleToggle}
         className={`w-full h-full flex items-center justify-between px-md py-sm rounded-lg text-body-md text-on-surface outline-none transition-all duration-200 select-none cursor-pointer ${
           variant === 'filter'
-            ? 'bg-[#EFF1F4] border border-transparent font-medium h-[42px]'
+            ? 'bg-surface-container-low border border-transparent font-medium h-[42px]'
             : 'bg-surface-container-lowest border border-outline-variant'
         } ${
           disabled 
@@ -118,7 +118,7 @@ export default function CustomSelect({
             : isOpen 
               ? 'ring-2 ring-secondary/20 border-secondary shadow-[0_0_0_2px_rgba(113,42,226,0.15)]' 
               : variant === 'filter'
-                ? 'hover:bg-[#E5E8EC]'
+                ? 'hover:bg-surface-container-high'
                 : 'hover:border-outline hover:bg-surface-container-low/30'
         }`}
       >
