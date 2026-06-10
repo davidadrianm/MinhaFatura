@@ -57,54 +57,117 @@ export default async function DashboardPage() {
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
-  // 1. Busca os cartões
-  const cards = await prisma.creditCard.findMany({
-    where: { userId: user.userId, isActive: true },
-  });
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+  sixMonthsAgo.setDate(1);
 
-  // 2. Busca todas as faturas em aberto ou fechadas (não pagas) para calcular o limite utilizado
-  const unpaidInvoices = await prisma.invoice.findMany({
-    where: {
-      userId: user.userId,
-      status: { in: ['open', 'closed', 'overdue'] }
-    }
-  });
-
-  const totalLimits = cards.reduce((sum, card) => sum + card.limit, 0);
-  const totalLimitUsed = unpaidInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
-  const availableLimit = totalLimits - totalLimitUsed;
-
-  // 3. Busca o valor total pendente a receber de devedores
-  const pendingDebtorsSum = await prisma.installmentSplit.aggregate({
-    where: {
-      paid: false,
-      installment: {
-        userId: user.userId
+  // Executa todas as consultas em paralelo para reduzir a latência de rede com o banco remoto
+  const [
+    cards,
+    unpaidInvoices,
+    pendingDebtorsSum,
+    currentMonthInvoices,
+    recentTransactions,
+    installmentsThisMonth,
+    alertInvoices,
+    transactionsLast6Months
+  ] = await Promise.all([
+    prisma.creditCard.findMany({
+      where: { userId: user.userId, isActive: true },
+    }),
+    prisma.invoice.findMany({
+      where: {
+        userId: user.userId,
+        status: { in: ['open', 'closed', 'overdue'] }
       }
-    },
-    _sum: {
-      amount: true
-    }
-  });
-  const totalPendingDebtors = pendingDebtorsSum._sum.amount || 0.0;
-
-  // 4. Busca faturas do mês atual
-  const currentMonthInvoices = await prisma.invoice.findMany({
-    where: {
-      userId: user.userId,
-      referenceMonth: currentMonth,
-      referenceYear: currentYear
-    },
-    include: {
-      card: true,
-      installments: {
-        include: {
-          splits: true
+    }),
+    prisma.installmentSplit.aggregate({
+      where: {
+        paid: false,
+        installment: {
+          userId: user.userId
+        }
+      },
+      _sum: {
+        amount: true
+      }
+    }),
+    prisma.invoice.findMany({
+      where: {
+        userId: user.userId,
+        referenceMonth: currentMonth,
+        referenceYear: currentYear
+      },
+      include: {
+        card: true,
+        installments: {
+          include: {
+            splits: true
+          }
         }
       }
-    }
-  });
+    }),
+    prisma.transaction.findMany({
+      where: { userId: user.userId },
+      include: {
+        card: true,
+        category: true,
+        splits: {
+          include: {
+            debtor: true
+          }
+        }
+      },
+      orderBy: {
+        purchaseDate: 'desc'
+      },
+      take: 5
+    }),
+    prisma.transactionInstallment.findMany({
+      where: {
+        userId: user.userId,
+        dueMonth: currentMonth,
+        dueYear: currentYear
+      },
+      include: {
+        transaction: {
+          include: {
+            category: true
+          }
+        }
+      }
+    }),
+    prisma.invoice.findMany({
+      where: {
+        userId: user.userId,
+        status: { in: ['open', 'closed', 'overdue'] },
+      },
+      include: {
+        card: true
+      },
+      orderBy: {
+        dueDate: 'asc'
+      },
+      take: 3
+    }),
+    prisma.transaction.findMany({
+      where: {
+        userId: user.userId,
+        purchaseDate: {
+          gte: sixMonthsAgo
+        }
+      },
+      select: {
+        amountTotal: true,
+        purchaseDate: true
+      }
+    })
+  ]);
 
+  const totalLimits = cards.filter(c => !c.parentCardId).reduce((sum, card) => sum + card.limit, 0);
+  const totalLimitUsed = unpaidInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+  const availableLimit = totalLimits - totalLimitUsed;
+  const totalPendingDebtors = pendingDebtorsSum._sum.amount || 0.0;
   const currentMonthSpent = currentMonthInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
 
   // Calcula o valor dos devedores nas faturas deste mês
@@ -117,40 +180,6 @@ export default async function DashboardPage() {
   }, 0);
 
   const currentMonthTitularSpent = currentMonthSpent - currentMonthDebtorsAmount;
-
-  // 5. Últimas 5 transações registradas
-  const recentTransactions = await prisma.transaction.findMany({
-    where: { userId: user.userId },
-    include: {
-      card: true,
-      category: true,
-      splits: {
-        include: {
-          debtor: true
-        }
-      }
-    },
-    orderBy: {
-      purchaseDate: 'desc'
-    },
-    take: 5
-  });
-
-  // 6. Gastos por categoria no mês atual
-  const installmentsThisMonth = await prisma.transactionInstallment.findMany({
-    where: {
-      userId: user.userId,
-      dueMonth: currentMonth,
-      dueYear: currentYear
-    },
-    include: {
-      transaction: {
-        include: {
-          category: true
-        }
-      }
-    }
-  });
 
   const categoryMap: { [key: string]: { name: string; color: string; amount: number } } = {};
   installmentsThisMonth.forEach((inst) => {
@@ -166,39 +195,6 @@ export default async function DashboardPage() {
   });
 
   const categoryList = Object.values(categoryMap).sort((a, b) => b.amount - a.amount);
-
-  // 7. Busca faturas vencidas ou próximas do vencimento para o bento/alertas
-  const alertInvoices = await prisma.invoice.findMany({
-    where: {
-      userId: user.userId,
-      status: { in: ['open', 'closed', 'overdue'] },
-    },
-    include: {
-      card: true
-    },
-    orderBy: {
-      dueDate: 'asc'
-    },
-    take: 3
-  });
-
-  // 8. Cálculo dinâmico de compras nos últimos 6 meses para o gráfico
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
-  sixMonthsAgo.setDate(1);
-
-  const transactionsLast6Months = await prisma.transaction.findMany({
-    where: {
-      userId: user.userId,
-      purchaseDate: {
-        gte: sixMonthsAgo
-      }
-    },
-    select: {
-      amountTotal: true,
-      purchaseDate: true
-    }
-  });
 
   const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
   const last6MonthsData: { label: string; amount: number }[] = [];

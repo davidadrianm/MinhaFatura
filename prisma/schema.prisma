@@ -42,6 +42,11 @@ model CreditCard {
   transactions Transaction[]
   installments TransactionInstallment[]
   invoices     Invoice[]
+
+  // Novos campos para limite compartilhado
+  parentCardId String?
+  parentCard   CreditCard?              @relation("SharedLimit", fields: [parentCardId], references: [id], onDelete: SetNull)
+  linkedCards  CreditCard[]             @relation("SharedLimit")
 }
 
 model Category {

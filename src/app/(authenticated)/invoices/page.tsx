@@ -15,67 +15,67 @@ export default async function InvoicesPage() {
   const currentMonth = now.getMonth() + 1; // 1-indexed (Jan = 1)
   const currentYear = now.getFullYear();
 
-  // Busca todas as faturas do usuário, incluindo o cartão e todas as parcelas com splits
-  const invoices = await prisma.invoice.findMany({
-    where: { 
-      userId: user.userId
-    },
-    include: {
-      card: {
-        select: {
-          id: true,
-          name: true,
-          bankName: true,
-          color: true
-        }
+  // Busca todas as faturas e os cartões ativos em paralelo
+  const [invoices, cards] = await Promise.all([
+    prisma.invoice.findMany({
+      where: { 
+        userId: user.userId
       },
-      installments: {
-        include: {
-          transaction: {
-            select: {
-              description: true,
-              purchaseDate: true,
-              category: {
-                select: {
-                  name: true,
-                  color: true
+      include: {
+        card: {
+          select: {
+            id: true,
+            name: true,
+            bankName: true,
+            color: true
+          }
+        },
+        installments: {
+          include: {
+            transaction: {
+              select: {
+                description: true,
+                purchaseDate: true,
+                category: {
+                  select: {
+                    name: true,
+                    color: true
+                  }
                 }
               }
-            }
-          },
-          splits: {
-            select: {
-              id: true,
-              amount: true,
-              paid: true,
-              debtor: {
-                select: {
-                  id: true,
-                  name: true
+            },
+            splits: {
+              select: {
+                id: true,
+                amount: true,
+                paid: true,
+                debtor: {
+                  select: {
+                    id: true,
+                    name: true
+                  }
                 }
               }
             }
           }
         }
-      }
-    },
-    orderBy: [
-      { referenceYear: 'asc' },
-      { referenceMonth: 'asc' }
-    ]
-  });
-
-  // Busca os cartões ativos do usuário para filtrar faturas
-  const cards = await prisma.creditCard.findMany({
-    where: { userId: user.userId, isActive: true },
-    select: {
-      id: true,
-      name: true,
-      bankName: true,
-      color: true
-    },
-    orderBy: { name: 'asc' }
-  });
+      },
+      orderBy: [
+        { referenceYear: 'asc' },
+        { referenceMonth: 'asc' }
+      ]
+    }),
+    prisma.creditCard.findMany({
+      where: { userId: user.userId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        bankName: true,
+        color: true
+      },
+      orderBy: { name: 'asc' }
+    })
+  ]);
 
   // Mapeia datas para strings ISO limpas para passar para o cliente
   const mappedInvoices = invoices.map((inv) => ({

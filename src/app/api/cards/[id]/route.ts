@@ -60,6 +60,12 @@ export async function DELETE(
       }, { status: 400 });
     }
 
+    // Remove o vínculo de limite compartilhado de qualquer cartão secundário
+    await prisma.creditCard.updateMany({
+      where: { parentCardId: id },
+      data: { parentCardId: null },
+    });
+
     // Apenas arquiva o cartão (isActive = false)
     await prisma.creditCard.update({
       where: { id },
@@ -94,9 +100,9 @@ export async function PUT(
       return NextResponse.json({ success: false, error: 'Cartão não encontrado' }, { status: 404 });
     }
 
-    const { name, bankName, brand, limit, closingDay, dueDay, color } = await request.json();
+    const { name, bankName, brand, limit, closingDay, dueDay, color, parentCardId } = await request.json();
 
-    if (!name || !bankName || !brand || limit === undefined || closingDay === undefined || dueDay === undefined) {
+    if (!name || !bankName || !brand || closingDay === undefined || dueDay === undefined) {
       return NextResponse.json({ success: false, error: 'Preencha todos os campos obrigatórios' }, { status: 400 });
     }
 
@@ -107,18 +113,63 @@ export async function PUT(
       return NextResponse.json({ success: false, error: 'Os dias de fechamento e vencimento devem ser entre 1 e 31' }, { status: 400 });
     }
 
+    let validatedParentCardId: string | null = null;
+    let finalLimit = limit ? parseFloat(limit) : 0;
+
+    if (parentCardId) {
+      if (parentCardId === id) {
+        return NextResponse.json({ success: false, error: 'Um cartão não pode compartilhar o limite consigo mesmo' }, { status: 400 });
+      }
+
+      const parentCard = await prisma.creditCard.findFirst({
+        where: { id: parentCardId, userId: user.userId, isActive: true },
+      });
+      if (!parentCard) {
+        return NextResponse.json({ success: false, error: 'Cartão principal não encontrado' }, { status: 400 });
+      }
+
+      // Verifica se o cartão atual possui filhos (não permite hierarquia multinível)
+      const hasChildren = await prisma.creditCard.count({
+        where: { parentCardId: id, isActive: true }
+      });
+      if (hasChildren > 0) {
+        return NextResponse.json({ success: false, error: 'Este cartão já é o limite principal de outros cartões e não pode ser compartilhado com outro' }, { status: 400 });
+      }
+
+      // Verifica se o cartão pai também é filho (não permite 2 níveis de filhos)
+      if (parentCard.parentCardId) {
+        return NextResponse.json({ success: false, error: 'O cartão principal selecionado já compartilha o limite de outro cartão' }, { status: 400 });
+      }
+
+      validatedParentCardId = parentCardId;
+      finalLimit = parentCard.limit;
+    } else {
+      if (limit === undefined || limit === null) {
+        return NextResponse.json({ success: false, error: 'Preencha todos os campos obrigatórios' }, { status: 400 });
+      }
+    }
+
     const updatedCard = await prisma.creditCard.update({
       where: { id },
       data: {
         name,
         bankName,
         brand,
-        limit: parseFloat(limit),
+        limit: finalLimit,
         closingDay: closingDayInt,
         dueDay: dueDayInt,
         color: color || undefined,
+        parentCardId: validatedParentCardId,
       },
     });
+
+    // Se este cartão for um principal e o seu limite mudou, atualiza o limite de todos os filhos vinculados a ele
+    if (!parentCardId) {
+      await prisma.creditCard.updateMany({
+        where: { parentCardId: id },
+        data: { limit: finalLimit }
+      });
+    }
 
     return NextResponse.json({ success: true, card: updatedCard });
   } catch (error) {

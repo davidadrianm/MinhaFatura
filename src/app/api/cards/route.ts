@@ -28,10 +28,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
     }
 
-    const { name, bankName, brand, lastDigits, limit, closingDay, dueDay, color } = await request.json();
+    const { name, bankName, brand, lastDigits, limit, closingDay, dueDay, color, parentCardId } = await request.json();
 
-    if (!name || !bankName || !brand || !lastDigits || !limit || !closingDay || !dueDay) {
-      return NextResponse.json({ success: false, error: 'Preencha todos os campos' }, { status: 400 });
+    if (!name || !bankName || !brand || !lastDigits || !closingDay || !dueDay) {
+      return NextResponse.json({ success: false, error: 'Preencha todos os campos obrigatórios' }, { status: 400 });
+    }
+
+    let validatedParentCardId: string | null = null;
+    let finalLimit = limit ? parseFloat(limit) : 0;
+
+    if (parentCardId) {
+      const parentCard = await prisma.creditCard.findFirst({
+        where: { id: parentCardId, userId: user.userId, isActive: true },
+      });
+      if (!parentCard) {
+        return NextResponse.json({ success: false, error: 'Cartão principal não encontrado' }, { status: 400 });
+      }
+      validatedParentCardId = parentCardId;
+      finalLimit = parentCard.limit;
+    } else if (limit === undefined || limit === null) {
+      return NextResponse.json({ success: false, error: 'Preencha todos os campos obrigatórios' }, { status: 400 });
     }
 
     const card = await prisma.creditCard.create({
@@ -41,10 +57,11 @@ export async function POST(request: Request) {
         bankName,
         brand,
         lastDigits: lastDigits.slice(-4), // Garante que guardamos apenas os últimos 4 dígitos
-        limit: parseFloat(limit),
+        limit: finalLimit,
         closingDay: parseInt(closingDay),
         dueDay: parseInt(dueDay),
         color: color || undefined,
+        parentCardId: validatedParentCardId,
       }
     });
 

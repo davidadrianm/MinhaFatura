@@ -76,6 +76,7 @@ interface CardWithInvoices {
   closingDay: number;
   dueDay: number;
   color?: string;
+  parentCardId?: string | null;
   invoices: {
     totalAmount: number;
   }[];
@@ -95,6 +96,8 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
   const [closingDay, setClosingDay] = useState('25');
   const [dueDay, setDueDay] = useState('5');
   const [color, setColor] = useState('#8D0DE3'); // Preset for Nubank
+  const [shareLimit, setShareLimit] = useState(false);
+  const [parentCardId, setParentCardId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -115,6 +118,8 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
     setClosingDay(card.closingDay.toString());
     setDueDay(card.dueDay.toString());
     setColor(card.color || bankPresets[card.bankName] || '#712ae2');
+    setShareLimit(!!card.parentCardId);
+    setParentCardId(card.parentCardId || '');
     setError('');
   };
 
@@ -127,6 +132,8 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
     setClosingDay('25');
     setDueDay('5');
     setColor('#8D0DE3');
+    setShareLimit(false);
+    setParentCardId('');
     setError('');
   };
 
@@ -150,10 +157,11 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
           bankName,
           brand,
           lastDigits: '0000',
-          limit,
+          limit: shareLimit ? undefined : limit,
           closingDay,
           dueDay,
           color,
+          parentCardId: shareLimit ? parentCardId : null,
         }),
       });
 
@@ -164,6 +172,8 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
       } else {
         setName('');
         setLimit('');
+        setShareLimit(false);
+        setParentCardId('');
         // Recarregar os cartões da API
         const fetchRes = await fetch('/api/cards');
         const fetchData = await fetchRes.json();
@@ -201,10 +211,11 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
           name,
           bankName,
           brand,
-          limit,
+          limit: shareLimit ? undefined : limit,
           closingDay,
           dueDay,
           color,
+          parentCardId: shareLimit ? parentCardId : null,
         }),
       });
 
@@ -250,6 +261,14 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
     }
   };
 
+  const parentOptions = cards
+    .filter(c => c.id !== editingCard?.id && !c.parentCardId)
+    .map(c => ({
+      value: c.id,
+      label: `${c.bankName} - ${c.name} (R$ ${c.limit.toLocaleString('pt-BR')})`,
+      icon: 'credit_card' as const
+    }));
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg items-start">
       
@@ -271,9 +290,34 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
             {cards.map((card) => {
-              const limitUsed = card.invoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
-              const limitAvailable = card.limit - limitUsed;
-              const percentageUsed = card.limit > 0 ? (limitUsed / card.limit) * 100 : 0;
+              // Cálculos de limites compartilhados
+              let displayLimit = card.limit;
+              let displayLimitUsed = card.invoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+              let isShared = false;
+              let sharedText = '';
+
+              if (card.parentCardId) {
+                const parent = cards.find(c => c.id === card.parentCardId);
+                if (parent) {
+                  const groupCards = cards.filter(c => c.id === parent.id || c.parentCardId === parent.id);
+                  displayLimit = parent.limit;
+                  displayLimitUsed = groupCards.reduce((sum, gc) => sum + gc.invoices.reduce((s, inv) => s + inv.totalAmount, 0), 0);
+                  isShared = true;
+                  sharedText = `Limite compartilhado com ${parent.name}`;
+                }
+              } else {
+                const children = cards.filter(c => c.parentCardId === card.id);
+                if (children.length > 0) {
+                  const groupCards = [card, ...children];
+                  displayLimit = card.limit;
+                  displayLimitUsed = groupCards.reduce((sum, gc) => sum + gc.invoices.reduce((s, inv) => s + inv.totalAmount, 0), 0);
+                  isShared = true;
+                  sharedText = `Limite principal (${children.length} vinculados)`;
+                }
+              }
+
+              const limitAvailable = displayLimit - displayLimitUsed;
+              const percentageUsed = displayLimit > 0 ? (displayLimitUsed / displayLimit) * 100 : 0;
               const cardTheme = getCardStyle(card.bankName, card.color);
 
               return (
@@ -314,7 +358,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold">Limite em Uso</p>
-                        <p className="text-body-md font-semibold text-on-surface">R$ {limitUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <p className="text-body-md font-semibold text-on-surface">R$ {displayLimitUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                       </div>
                     </div>
 
@@ -328,8 +372,20 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
 
                     <div className="flex justify-between text-[11px] text-on-surface-variant mt-1 font-medium">
                       <span>{percentageUsed.toFixed(0)}% utilizado</span>
-                      <span>Total: R$ {card.limit.toLocaleString('pt-BR')}</span>
+                      <span className="flex items-center gap-[2px]">
+                        {isShared && (
+                          <span className="material-symbols-outlined text-[12px] text-secondary">link</span>
+                        )}
+                        <span>Total: R$ {displayLimit.toLocaleString('pt-BR')}</span>
+                      </span>
                     </div>
+
+                    {isShared && (
+                      <div className="text-[10px] bg-secondary/10 text-secondary border border-secondary/20 rounded px-2 py-0.5 font-bold self-start mt-1 flex items-center gap-[2px]">
+                        <span className="material-symbols-outlined text-[12px]">share</span>
+                        <span>{sharedText}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Divider */}
@@ -473,18 +529,57 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
               </div>
             )}
 
-            <div className="space-y-1">
-              <label className="text-label-sm font-label-sm text-on-surface-variant block">Limite Total (R$)</label>
-              <input
-                type="number"
-                required
-                min={0}
-                placeholder="Ex: 5000"
-                value={limit}
-                onChange={(e) => setLimit(e.target.value)}
-                className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all focus:ring-2 focus:ring-secondary/20 focus:border-secondary"
-              />
-            </div>
+            {parentOptions.length > 0 && (
+              <div className="flex items-center gap-sm bg-surface border border-outline-variant rounded-lg p-sm">
+                <input
+                  type="checkbox"
+                  id="shareLimit"
+                  checked={shareLimit}
+                  onChange={(e) => {
+                    setShareLimit(e.target.checked);
+                    if (e.target.checked && parentOptions.length > 0 && !parentCardId) {
+                      setParentCardId(parentOptions[0].value);
+                      const p = cards.find(c => c.id === parentOptions[0].value);
+                      if (p) setLimit(p.limit.toString());
+                    }
+                  }}
+                  className="w-4 h-4 cursor-pointer"
+                />
+                <label htmlFor="shareLimit" className="text-label-md font-label-md text-on-surface cursor-pointer select-none">
+                  Compartilhar limite com outro cartão
+                </label>
+              </div>
+            )}
+
+            {shareLimit && parentOptions.length > 0 && (
+              <div className="space-y-1 animate-fade-in">
+                <label className="text-label-sm font-label-sm text-on-surface-variant block">Cartão Principal</label>
+                <CustomSelect
+                  options={parentOptions}
+                  value={parentCardId}
+                  onChange={(val) => {
+                    setParentCardId(val);
+                    const p = cards.find(c => c.id === val);
+                    if (p) setLimit(p.limit.toString());
+                  }}
+                />
+              </div>
+            )}
+
+            {!shareLimit && (
+              <div className="space-y-1">
+                <label className="text-label-sm font-label-sm text-on-surface-variant block">Limite Total (R$)</label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  placeholder="Ex: 5000"
+                  value={limit}
+                  onChange={(e) => setLimit(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all focus:ring-2 focus:ring-secondary/20 focus:border-secondary"
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-sm">
               <div className="space-y-1">
