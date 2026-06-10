@@ -47,6 +47,8 @@ model CreditCard {
   parentCardId String?
   parentCard   CreditCard?              @relation("SharedLimit", fields: [parentCardId], references: [id], onDelete: SetNull)
   linkedCards  CreditCard[]             @relation("SharedLimit")
+
+  @@index([userId])
 }
 
 model Category {
@@ -58,6 +60,8 @@ model Category {
   userId       String
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+
+  @@index([userId])
 }
 
 model Debtor {
@@ -69,6 +73,8 @@ model Debtor {
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   splits            TransactionSplit[]
   installmentSplits InstallmentSplit[]
+
+  @@index([userId])
 }
 
 model Transaction {
@@ -92,6 +98,10 @@ model Transaction {
   user              User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   installments      TransactionInstallment[]
   splits            TransactionSplit[]
+
+  @@index([userId])
+  @@index([cardId])
+  @@index([categoryId])
 }
 
 model TransactionInstallment {
@@ -112,6 +122,11 @@ model TransactionInstallment {
   userId            String
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   splits            InstallmentSplit[]
+
+  @@index([userId])
+  @@index([cardId])
+  @@index([transactionId])
+  @@index([invoiceId])
 }
 
 model TransactionSplit {
@@ -123,6 +138,9 @@ model TransactionSplit {
   transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   debtorId      String
   debtor        Debtor      @relation(fields: [debtorId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([debtorId])
 }
 
 model InstallmentSplit {
@@ -136,6 +154,9 @@ model InstallmentSplit {
   installment   TransactionInstallment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
   debtorId      String
   debtor        Debtor                 @relation(fields: [debtorId], references: [id], onDelete: Cascade)
+
+  @@index([installmentId])
+  @@index([debtorId])
 }
 
 model Invoice {
@@ -156,4 +177,6 @@ model Invoice {
   installments   TransactionInstallment[]
 
   @@unique([cardId, referenceMonth, referenceYear])
+  @@index([userId])
+  @@index([cardId])
 }

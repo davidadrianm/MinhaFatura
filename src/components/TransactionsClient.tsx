@@ -521,17 +521,20 @@ export default function TransactionsClient({
         setSplitDebtorAmount('');
         setIsOpen(false); // Fecha o modal
         
-        // Atualiza a lista
-        const fetchRes = await fetch(`/api/transactions?cardId=${filterCard}&categoryId=${filterCategory}`);
-        const fetchData = await fetchRes.json();
-        if (fetchData.success) {
-          const mapped = fetchData.transactions.map((tx: any) => ({
-            ...tx,
-            purchaseDate: tx.purchaseDate.split('T')[0]
-          }));
-          setTransactions(mapped);
-          router.refresh();
-        }
+        // Atualiza a lista em segundo plano sem bloquear a interface (finally block)
+        fetch(`/api/transactions?cardId=${filterCard}&categoryId=${filterCategory}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              const mapped = data.transactions.map((tx: any) => ({
+                ...tx,
+                purchaseDate: tx.purchaseDate.split('T')[0]
+              }));
+              setTransactions(mapped);
+              router.refresh();
+            }
+          })
+          .catch(err => console.error("Erro ao recarregar transações:", err));
       }
     } catch (err) {
       setError('Erro de conexão.');
@@ -731,17 +734,20 @@ export default function TransactionsClient({
         setTxToEdit(null);
         setPendingEditData(null);
 
-        // Update list
-        const fetchRes = await fetch(`/api/transactions?cardId=${filterCard}&categoryId=${filterCategory}`);
-        const fetchData = await fetchRes.json();
-        if (fetchData.success) {
-          const mapped = fetchData.transactions.map((tx: any) => ({
-            ...tx,
-            purchaseDate: tx.purchaseDate.split('T')[0]
-          }));
-          setTransactions(mapped);
-          router.refresh();
-        }
+        // Atualiza a lista em segundo plano de forma não-bloqueante
+        fetch(`/api/transactions?cardId=${filterCard}&categoryId=${filterCategory}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              const mapped = data.transactions.map((tx: any) => ({
+                ...tx,
+                purchaseDate: tx.purchaseDate.split('T')[0]
+              }));
+              setTransactions(mapped);
+              router.refresh();
+            }
+          })
+          .catch(err => console.error("Erro ao recarregar transações pós-edição:", err));
       }
     } catch (err) {
       setError('Erro de conexão ao salvar alteração.');
@@ -779,19 +785,23 @@ export default function TransactionsClient({
       if (res.ok && data.success) {
         if (type === 'all') {
           setTransactions(transactions.filter(t => t.id !== txId));
+          router.refresh();
         } else {
-          // Se deletou parcelas futuras, busca a lista atualizada para sincronizar o estado
-          const fetchRes = await fetch(`/api/transactions?cardId=${filterCard}&categoryId=${filterCategory}`);
-          const fetchData = await fetchRes.json();
-          if (fetchData.success) {
-            const mapped = fetchData.transactions.map((tx: any) => ({
-              ...tx,
-              purchaseDate: tx.purchaseDate.split('T')[0]
-            }));
-            setTransactions(mapped);
-          }
+          // Se deletou parcelas futuras, busca a lista atualizada em segundo plano
+          fetch(`/api/transactions?cardId=${filterCard}&categoryId=${filterCategory}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.success) {
+                const mapped = data.transactions.map((tx: any) => ({
+                  ...tx,
+                  purchaseDate: tx.purchaseDate.split('T')[0]
+                }));
+                setTransactions(mapped);
+                router.refresh();
+              }
+            })
+            .catch(err => console.error("Erro ao recarregar transações pós-deleção:", err));
         }
-        router.refresh();
       } else {
         alert(data.error || 'Erro ao deletar transação.');
       }

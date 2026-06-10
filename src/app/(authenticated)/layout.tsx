@@ -16,8 +16,8 @@ export default async function AuthenticatedLayout({
     redirect('/');
   }
 
-  // Garante que as transações recorrentes tenham sempre 12 meses de faturamento futuro
-  await ensureRecurringTransactions(user.userId);
+  // Garante que as transações recorrentes tenham sempre 12 meses de faturamento futuro (roda em background)
+  ensureRecurringTransactions(user.userId).catch(err => console.error("Erro ao garantir transações recorrentes:", err));
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-on-background font-sans">

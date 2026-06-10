@@ -118,8 +118,8 @@ export async function POST(request: Request) {
     // Gera as parcelas e atualiza faturas
     await createInstallmentsForTransaction(transaction.id);
 
-    // Garante que as transações recorrentes tenham sempre 12 meses de faturamento futuro
-    await ensureRecurringTransactions(user.userId);
+    // Garante que as transações recorrentes tenham sempre 12 meses de faturamento futuro (roda em background)
+    ensureRecurringTransactions(user.userId).catch(err => console.error("Erro ao processar transações recorrentes:", err));
 
     return NextResponse.json({ success: true, transaction });
   } catch (error: any) {
