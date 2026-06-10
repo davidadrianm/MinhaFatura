@@ -38,30 +38,57 @@ export function verifyToken(token: string): UserPayload | null {
 export async function getAuthenticatedUser(
   req: NextRequest | Request
 ): Promise<UserPayload | null> {
-  let token: string | undefined;
+  try {
+    const { createServerClient } = await import('@supabase/ssr');
+    
+    // Extrai os cookies da requisição
+    const cookieHeader = req.headers.get('cookie') || '';
+    
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieHeader.split(';').map(c => c.trim()).filter(Boolean).map(c => {
+              const parts = c.split('=');
+              return { name: parts[0], value: parts[1] || '' };
+            });
+          },
+          setAll() {
+            // Leitura apenas nesta função utilitária
+          }
+        }
+      }
+    );
 
-  if (req instanceof NextRequest) {
-    token = req.cookies.get('session-token')?.value;
-  } else {
-    // Para Requests normais (ex: em routes)
-    const cookieHeader = req.headers.get('cookie');
-    if (cookieHeader) {
-      const match = cookieHeader.match(/session-token=([^;]+)/);
-      if (match) token = match[1];
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    return {
+      userId: user.id,
+      email: user.email || '',
+      name: user.user_metadata?.full_name || user.user_metadata?.name || 'Usuário',
+    };
+  } catch (error) {
+    return null;
   }
-
-  if (!token) return null;
-  return verifyToken(token);
 }
 
 /**
  * Utilitário para uso direto em Server Components (lendo cookies do Next.js).
  */
 export async function getSessionUser() {
-  const { cookies } = await import('next/headers');
-  const cookieStore = await cookies();
-  const token = cookieStore.get('session-token')?.value;
-  if (!token) return null;
-  return verifyToken(token);
+  try {
+    const { createClient } = await import('@/lib/supabase/server');
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    return {
+      userId: user.id,
+      email: user.email || '',
+      name: user.user_metadata?.full_name || user.user_metadata?.name || 'Usuário',
+    };
+  } catch (error) {
+    return null;
+  }
 }

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import CustomSelect, { SelectOption } from './CustomSelect';
 import MonthPicker from './MonthPicker';
 import DatePicker from './DatePicker';
@@ -243,16 +243,19 @@ export default function TransactionsClient({
 
   // Handle automatic decimal formatting (comma as decimal separator)
   const handleAmountChange = (val: string) => {
+    const isNegativeEnabled = typeof window !== 'undefined' && localStorage.getItem('pref_allow_negative') === 'true';
+    const hasMinus = isNegativeEnabled && val.includes('-');
+    
     const digits = val.replace(/\D/g, '');
     if (!digits) {
       setAmountTotal('');
-      setAmountFormatted('');
+      setAmountFormatted(hasMinus ? '-' : '');
       return;
     }
-    const numValue = parseInt(digits, 10) / 100;
+    const numValue = (parseInt(digits, 10) / 100) * (hasMinus ? -1 : 1);
     setAmountTotal(numValue.toFixed(2));
     setAmountFormatted(
-      numValue.toLocaleString('pt-BR', {
+      (hasMinus ? '-' : '') + Math.abs(numValue).toLocaleString('pt-BR', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })
@@ -261,16 +264,19 @@ export default function TransactionsClient({
 
   // Handle automatic decimal formatting for debtor split amount (comma as decimal separator)
   const handleSplitAmountChange = (val: string) => {
+    const isNegativeEnabled = typeof window !== 'undefined' && localStorage.getItem('pref_allow_negative') === 'true';
+    const hasMinus = isNegativeEnabled && val.includes('-');
+    
     const digits = val.replace(/\D/g, '');
     if (!digits) {
       setSplitDebtorAmount('');
-      setSplitDebtorAmountFormatted('');
+      setSplitDebtorAmountFormatted(hasMinus ? '-' : '');
       return;
     }
-    const numValue = parseInt(digits, 10) / 100;
+    const numValue = (parseInt(digits, 10) / 100) * (hasMinus ? -1 : 1);
     setSplitDebtorAmount(numValue.toFixed(2));
     setSplitDebtorAmountFormatted(
-      numValue.toLocaleString('pt-BR', {
+      (hasMinus ? '-' : '') + Math.abs(numValue).toLocaleString('pt-BR', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })
@@ -352,19 +358,17 @@ export default function TransactionsClient({
   const [expandedTxIds, setExpandedTxIds] = useState<Set<string>>(new Set());
 
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Escuta o query param para abrir o modal automaticamente
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('new') === 'true') {
-        setIsOpen(true);
-        // Limpar o query param sem recarregar a página
-        const newUrl = window.location.pathname;
-        window.history.replaceState({}, '', newUrl);
-      }
+    if (searchParams.get('new') === 'true') {
+      setIsOpen(true);
+      // Limpar o query param sem recarregar a página
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
     }
-  }, []);
+  }, [searchParams]);
 
   // Reset form states when modal opens
   useEffect(() => {
@@ -395,14 +399,21 @@ export default function TransactionsClient({
     const amountVal = parseFloat(splitDebtorAmount);
     const totalVal = parseFloat(amountTotal);
     
-    if (isNaN(amountVal) || amountVal <= 0) {
-      setError('Digite um valor válido para a divisão.');
+    const isNegativeEnabled = typeof window !== 'undefined' && localStorage.getItem('pref_allow_negative') === 'true';
+    if (isNaN(amountVal) || (isNegativeEnabled ? amountVal === 0 : amountVal <= 0)) {
+      setError(isNegativeEnabled ? 'Digite um valor válido diferente de zero para a divisão.' : 'Digite um valor válido maior que zero para a divisão.');
       modalBodyRef.current?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
     
-    if (isNaN(totalVal) || totalVal <= 0) {
+    if (isNaN(totalVal) || (isNegativeEnabled ? totalVal === 0 : totalVal <= 0)) {
       setError('Preencha o valor total da compra primeiro.');
+      modalBodyRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
+    if (isNegativeEnabled && Math.sign(amountVal) !== Math.sign(totalVal)) {
+      setError('O valor da divisão deve ter o mesmo sinal (positivo/negativo) que o valor total da compra.');
       modalBodyRef.current?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
@@ -417,7 +428,7 @@ export default function TransactionsClient({
     }
 
     const currentSum = formSplits.reduce((sum, s) => sum + parseFloat(s.amount), 0);
-    if (currentSum + amountVal > totalVal) {
+    if (Math.abs(currentSum + amountVal) > Math.abs(totalVal)) {
       setError('A soma das divisões não pode exceder o valor total da compra.');
       modalBodyRef.current?.scrollIntoView({ behavior: 'smooth' });
       return;
@@ -450,8 +461,9 @@ export default function TransactionsClient({
     }
 
     const totalVal = parseFloat(amountTotal);
-    if (isNaN(totalVal) || totalVal <= 0) {
-      setError('Por favor, insira um valor total maior que zero.');
+    const isNegativeEnabled = typeof window !== 'undefined' && localStorage.getItem('pref_allow_negative') === 'true';
+    if (isNaN(totalVal) || (isNegativeEnabled ? totalVal === 0 : totalVal <= 0)) {
+      setError(isNegativeEnabled ? 'Por favor, insira um valor total diferente de zero.' : 'Por favor, insira um valor total maior que zero.');
       setLoading(false);
       return;
     }
@@ -463,8 +475,13 @@ export default function TransactionsClient({
         return;
       }
       const splitsSum = formSplits.reduce((sum, s) => sum + parseFloat(s.amount), 0);
-      if (splitsSum > totalVal) {
+      if (Math.abs(splitsSum) > Math.abs(totalVal)) {
         setError('A soma das divisões não pode exceder o valor total da compra.');
+        setLoading(false);
+        return;
+      }
+      if (isNegativeEnabled && formSplits.some(s => Math.sign(parseFloat(s.amount)) !== Math.sign(totalVal))) {
+        setError('Todas as divisões devem ter o mesmo sinal (positivo/negativo) que o valor total da compra.');
         setLoading(false);
         return;
       }
@@ -557,7 +574,29 @@ export default function TransactionsClient({
       })
     );
     
-    setPurchaseDate(tx.purchaseDate);
+    let displayDate = tx.purchaseDate;
+    if (filter && tx.recurrenceType && tx.recurrenceType !== 'none') {
+      const inst = tx.installments?.find(
+        i => i.dueMonth === filter.month && i.dueYear === filter.year
+      );
+      if (inst) {
+        const i = inst.installmentNumber - (tx.installmentStart || 1) + 1;
+        const [year, month, day] = tx.purchaseDate.split('-').map(Number);
+        const instDate = new Date(Date.UTC(year, month - 1, day));
+        
+        if (tx.recurrencePeriod === 'daily') {
+          instDate.setUTCDate(instDate.getUTCDate() + (i - 1));
+        } else if (tx.recurrencePeriod === 'weekly') {
+          instDate.setUTCDate(instDate.getUTCDate() + (i - 1) * 7);
+        } else if (tx.recurrencePeriod === 'biweekly') {
+          instDate.setUTCDate(instDate.getUTCDate() + (i - 1) * 15);
+        } else { // monthly
+          instDate.setUTCMonth(instDate.getUTCMonth() + (i - 1));
+        }
+        displayDate = instDate.toISOString().split('T')[0];
+      }
+    }
+    setPurchaseDate(displayDate);
     setCardId(tx.card.id);
     setCategoryId(tx.category.id);
     setNotes(tx.notes || '');
@@ -609,8 +648,9 @@ export default function TransactionsClient({
     setError('');
 
     const totalVal = parseFloat(amountTotal);
-    if (isNaN(totalVal) || totalVal <= 0) {
-      setError('Por favor, insira um valor total maior que zero.');
+    const isNegativeEnabled = typeof window !== 'undefined' && localStorage.getItem('pref_allow_negative') === 'true';
+    if (isNaN(totalVal) || (isNegativeEnabled ? totalVal === 0 : totalVal <= 0)) {
+      setError(isNegativeEnabled ? 'Por favor, insira um valor total diferente de zero.' : 'Por favor, insira um valor total maior que zero.');
       return;
     }
 
@@ -620,8 +660,12 @@ export default function TransactionsClient({
         return;
       }
       const splitsSum = formSplits.reduce((sum, s) => sum + parseFloat(s.amount), 0);
-      if (splitsSum > totalVal) {
+      if (Math.abs(splitsSum) > Math.abs(totalVal)) {
         setError('A soma das divisões não pode exceder o valor total da compra.');
+        return;
+      }
+      if (isNegativeEnabled && formSplits.some(s => Math.sign(parseFloat(s.amount)) !== Math.sign(totalVal))) {
+        setError('Todas as divisões devem ter o mesmo sinal (positivo/negativo) que o valor total da compra.');
         return;
       }
     }
@@ -631,6 +675,7 @@ export default function TransactionsClient({
     // Data to be submitted
     const editData = {
       description,
+      purchaseDate,
       amountTotal,
       cardId,
       categoryId,
@@ -852,21 +897,12 @@ export default function TransactionsClient({
   return (
     <div className="space-y-md">
       
-      {/* Top header row with add button */}
+      {/* Top header row */}
       <div className="flex items-center justify-between gap-md mb-md">
         <h2 className="text-body-lg font-bold text-on-surface flex items-center gap-xs">
           <span className="material-symbols-outlined text-secondary text-2xl">payments</span>
           Transações
         </h2>
-
-        <button
-          type="button"
-          onClick={handleNewTransactionClick}
-          className="bg-secondary text-on-primary font-label-md text-label-md px-md py-base rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-sm flex items-center gap-xs shrink-0 cursor-pointer h-[42px]"
-        >
-          <span className="material-symbols-outlined text-label-sm">add</span>
-          <span>Registrar Compra</span>
-        </button>
       </div>
 
       {/* Filters Bar Card */}
@@ -974,7 +1010,7 @@ export default function TransactionsClient({
       </div>
 
       {/* Transactions Table */}
-      <div className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30">
+      <div className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30 overflow-hidden">
         <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-surface-container-high bg-surface-container-low text-label-sm font-label-sm text-on-surface-variant select-none">
@@ -1260,7 +1296,6 @@ export default function TransactionsClient({
                     <DatePicker 
                       value={purchaseDate}
                       onChange={setPurchaseDate}
-                      disabled={txToEdit !== null}
                     />
                   </div>
 

@@ -13,7 +13,7 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
   const router = useRouter();
 
   const menuItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: 'dashboard' },
+    { name: 'Resumo', href: '/dashboard', icon: 'dashboard' },
     { name: 'Cartões', href: '/cards', icon: 'credit_card' },
     { name: 'Transações', href: '/transactions', icon: 'receipt' },
     { name: 'Faturas', href: '/invoices', icon: 'calendar_month' },

@@ -17,6 +17,7 @@ export async function PUT(
     const body = await request.json();
     const {
       description,
+      purchaseDate,
       amountTotal,
       cardId,
       categoryId,
@@ -72,6 +73,37 @@ export async function PUT(
         }
       }
 
+      let newBasePurchaseDate = transaction.purchaseDate;
+      if (purchaseDate) {
+        const newPurchaseDate = new Date(`${purchaseDate}T12:00:00.000Z`);
+        
+        if (isRecurring && selectedMonth && selectedYear) {
+          const targetInstallment = transaction.installments.find(
+            (inst) => inst.dueMonth === selectedMonth && inst.dueYear === selectedYear
+          );
+          if (targetInstallment) {
+            const idx = targetInstallment.installmentNumber - transaction.installmentStart;
+            const originalInstDate = new Date(transaction.purchaseDate);
+            if (transaction.recurrencePeriod === 'daily') {
+              originalInstDate.setUTCDate(transaction.purchaseDate.getUTCDate() + idx);
+            } else if (transaction.recurrencePeriod === 'weekly') {
+              originalInstDate.setUTCDate(transaction.purchaseDate.getUTCDate() + idx * 7);
+            } else if (transaction.recurrencePeriod === 'biweekly') {
+              originalInstDate.setUTCDate(transaction.purchaseDate.getUTCDate() + idx * 15);
+            } else {
+              originalInstDate.setUTCMonth(transaction.purchaseDate.getUTCMonth() + idx);
+            }
+            
+            const diffMs = newPurchaseDate.getTime() - originalInstDate.getTime();
+            newBasePurchaseDate = new Date(transaction.purchaseDate.getTime() + diffMs);
+          } else {
+            newBasePurchaseDate = newPurchaseDate;
+          }
+        } else {
+          newBasePurchaseDate = newPurchaseDate;
+        }
+      }
+
       // 1. Update the parent transaction attributes
       await prisma.transaction.update({
         where: { id },
@@ -83,6 +115,7 @@ export async function PUT(
           amountTotal: finalAmountTotal,
           installmentsCount: newCount,
           installmentStart: newStart,
+          purchaseDate: newBasePurchaseDate,
         }
       });
 
@@ -105,13 +138,6 @@ export async function PUT(
       const isFixed = transaction.recurrenceType === 'fixed' || transaction.recurrenceType === 'fixed_ended';
       const count = isFixed ? sortedExistingInstallments.length : newCount;
 
-      const baseAmount = isFixed
-        ? finalAmountTotal
-        : Math.round((finalAmountTotal / count) * 100) / 100;
-      const lastAmount = isFixed
-        ? finalAmountTotal
-        : Math.round((finalAmountTotal - (baseAmount * (count - 1))) * 100) / 100;
-
       const affectedInvoiceIds = new Set<string>();
 
       // Get credit card details once to avoid querying in a loop
@@ -121,22 +147,32 @@ export async function PUT(
       }
 
       for (let i = 1; i <= count; i++) {
-        const isLast = i === count;
-        const installmentAmount = isLast ? lastAmount : baseAmount;
+        let installmentAmount;
+        if (isFixed) {
+          installmentAmount = finalAmountTotal;
+        } else {
+          const sign = Math.sign(finalAmountTotal);
+          const totalCents = Math.round(Math.abs(finalAmountTotal) * 100);
+          const baseCents = Math.floor(totalCents / count);
+          const remainderCents = totalCents % count;
+          const installmentCents = i <= remainderCents ? (baseCents + 1) : baseCents;
+          installmentAmount = (installmentCents / 100) * sign;
+        }
+
         const currentInstallmentNumber = isFixed
           ? (sortedExistingInstallments[i - 1]?.installmentNumber || i)
           : (newStart + (i - 1));
 
         // Calculate reference date for this installment
-        const instPurchaseDate = new Date(transaction.purchaseDate);
+        const instPurchaseDate = new Date(newBasePurchaseDate);
         if (transaction.recurrencePeriod === 'daily') {
-          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1));
+          instPurchaseDate.setUTCDate(newBasePurchaseDate.getUTCDate() + (i - 1));
         } else if (transaction.recurrencePeriod === 'weekly') {
-          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 7);
+          instPurchaseDate.setUTCDate(newBasePurchaseDate.getUTCDate() + (i - 1) * 7);
         } else if (transaction.recurrencePeriod === 'biweekly') {
-          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 15);
+          instPurchaseDate.setUTCDate(newBasePurchaseDate.getUTCDate() + (i - 1) * 15);
         } else { // monthly
-          instPurchaseDate.setUTCMonth(transaction.purchaseDate.getUTCMonth() + (i - 1));
+          instPurchaseDate.setUTCMonth(newBasePurchaseDate.getUTCMonth() + (i - 1));
         }
 
         const { referenceMonth, referenceYear, closingDate, dueDate } = calculateInvoiceDate(
@@ -200,13 +236,18 @@ export async function PUT(
 
         if (finalSplits && finalSplits.length > 0) {
           for (const split of finalSplits) {
-            const baseSplitAmount = isFixed
-              ? parseFloat(split.amount)
-              : Math.round((parseFloat(split.amount) / count) * 100) / 100;
-            const lastSplitAmount = isFixed
-              ? parseFloat(split.amount)
-              : Math.round((parseFloat(split.amount) - (baseSplitAmount * (count - 1))) * 100) / 100;
-            const splitAmount = (i === count) ? lastSplitAmount : baseSplitAmount;
+            let splitAmount;
+            if (isFixed) {
+              splitAmount = parseFloat(split.amount);
+            } else {
+              const splitAmountParsed = parseFloat(split.amount);
+              const signSplit = Math.sign(splitAmountParsed);
+              const totalSplitCents = Math.round(Math.abs(splitAmountParsed) * 100);
+              const baseSplitCents = Math.floor(totalSplitCents / count);
+              const remainderSplitCents = totalSplitCents % count;
+              const splitCents = i <= remainderSplitCents ? (baseSplitCents + 1) : baseSplitCents;
+              splitAmount = (splitCents / 100) * signSplit;
+            }
 
             await prisma.installmentSplit.create({
               data: {
@@ -251,16 +292,21 @@ export async function PUT(
         return NextResponse.json({ success: false, error: 'Parcela não encontrada para o mês selecionado' }, { status: 404 });
       }
 
-      const i = targetInstallment.installmentNumber - transaction.installmentStart + 1;
-      const instPurchaseDate = new Date(transaction.purchaseDate);
-      if (transaction.recurrencePeriod === 'daily') {
-        instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1));
-      } else if (transaction.recurrencePeriod === 'weekly') {
-        instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 7);
-      } else if (transaction.recurrencePeriod === 'biweekly') {
-        instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 15);
+      let instPurchaseDate;
+      if (purchaseDate) {
+        instPurchaseDate = new Date(`${purchaseDate}T12:00:00.000Z`);
       } else {
-        instPurchaseDate.setUTCMonth(transaction.purchaseDate.getUTCMonth() + (i - 1));
+        const i = targetInstallment.installmentNumber - transaction.installmentStart + 1;
+        instPurchaseDate = new Date(transaction.purchaseDate);
+        if (transaction.recurrencePeriod === 'daily') {
+          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1));
+        } else if (transaction.recurrencePeriod === 'weekly') {
+          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 7);
+        } else if (transaction.recurrencePeriod === 'biweekly') {
+          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 15);
+        } else {
+          instPurchaseDate.setUTCMonth(transaction.purchaseDate.getUTCMonth() + (i - 1));
+        }
       }
 
       let newTxAmountTotal = newAmountVal;
@@ -336,16 +382,21 @@ export async function PUT(
 
       const firstFutureInst = futureInstallments[0];
 
-      const i = firstFutureInst.installmentNumber - transaction.installmentStart + 1;
-      const instPurchaseDate = new Date(transaction.purchaseDate);
-      if (transaction.recurrencePeriod === 'daily') {
-        instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1));
-      } else if (transaction.recurrencePeriod === 'weekly') {
-        instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 7);
-      } else if (transaction.recurrencePeriod === 'biweekly') {
-        instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 15);
+      let instPurchaseDate;
+      if (purchaseDate) {
+        instPurchaseDate = new Date(`${purchaseDate}T12:00:00.000Z`);
       } else {
-        instPurchaseDate.setUTCMonth(transaction.purchaseDate.getUTCMonth() + (i - 1));
+        const i = firstFutureInst.installmentNumber - transaction.installmentStart + 1;
+        instPurchaseDate = new Date(transaction.purchaseDate);
+        if (transaction.recurrencePeriod === 'daily') {
+          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1));
+        } else if (transaction.recurrencePeriod === 'weekly') {
+          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 7);
+        } else if (transaction.recurrencePeriod === 'biweekly') {
+          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 15);
+        } else {
+          instPurchaseDate.setUTCMonth(transaction.purchaseDate.getUTCMonth() + (i - 1));
+        }
       }
 
       let newTxAmountTotal = newAmountVal;

@@ -313,7 +313,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
                         <p className="text-body-md font-semibold text-on-surface">R$ {limitAvailable.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold">Fatura Atual</p>
+                        <p className="text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold">Limite em Uso</p>
                         <p className="text-body-md font-semibold text-on-surface">R$ {limitUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                       </div>
                     </div>

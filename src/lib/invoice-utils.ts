@@ -176,29 +176,6 @@ export async function createInstallmentsForTransaction(transactionId: string): P
 
   const isFixed = recurrenceType === 'fixed';
 
-  // Calcula valores de cada parcela (lidando com arredondamento de centavos)
-  const baseInstallmentAmount = isFixed
-    ? amountTotal
-    : Math.round((amountTotal / installmentsCount) * 100) / 100;
-  const lastInstallmentAmount = isFixed
-    ? amountTotal
-    : Math.round((amountTotal - (baseInstallmentAmount * (installmentsCount - 1))) * 100) / 100;
-
-  // Prepara os valores de split por devedor por parcela (com tratamento de arredondamento)
-  const splitsInfo = transaction.splits.map(split => {
-    const baseSplitAmount = isFixed
-      ? split.amount
-      : Math.round((split.amount / installmentsCount) * 100) / 100;
-    const lastSplitAmount = isFixed
-      ? split.amount
-      : Math.round((split.amount - (baseSplitAmount * (installmentsCount - 1))) * 100) / 100;
-    return {
-      debtorId: split.debtorId,
-      baseSplitAmount,
-      lastSplitAmount,
-    };
-  });
-
   const invoiceIdsToRecalculate = new Set<string>();
 
   for (let i = 1; i <= installmentsCount; i++) {
@@ -233,7 +210,19 @@ export async function createInstallmentsForTransaction(transactionId: string): P
 
     invoiceIdsToRecalculate.add(invoice.id);
 
-    const installmentAmount = (i === installmentsCount) ? lastInstallmentAmount : baseInstallmentAmount;
+    // Calcula o valor da parcela para o índice i (distribuindo sobras de centavos nas primeiras parcelas)
+    let installmentAmount;
+    if (isFixed) {
+      installmentAmount = amountTotal;
+    } else {
+      const sign = Math.sign(amountTotal);
+      const totalCents = Math.round(Math.abs(amountTotal) * 100);
+      const baseCents = Math.floor(totalCents / installmentsCount);
+      const remainderCents = totalCents % installmentsCount;
+      const installmentCents = i <= remainderCents ? (baseCents + 1) : baseCents;
+      installmentAmount = (installmentCents / 100) * sign;
+    }
+
     const currentInstallmentNumber = installmentStart + (i - 1);
 
     // Cria a parcela no banco de dados
@@ -251,14 +240,25 @@ export async function createInstallmentsForTransaction(transactionId: string): P
       },
     });
 
-    // Cria os splits da parcela
-    for (const splitInfo of splitsInfo) {
-      const splitAmountForThisInstallment = (i === installmentsCount) ? splitInfo.lastSplitAmount : splitInfo.baseSplitAmount;
+    // Cria os splits da parcela (distribuindo sobras de centavos de split nas primeiras parcelas)
+    for (const split of transaction.splits) {
+      let splitAmount;
+      if (isFixed) {
+        splitAmount = split.amount;
+      } else {
+        const signSplit = Math.sign(split.amount);
+        const totalSplitCents = Math.round(Math.abs(split.amount) * 100);
+        const baseSplitCents = Math.floor(totalSplitCents / installmentsCount);
+        const remainderSplitCents = totalSplitCents % installmentsCount;
+        const splitCents = i <= remainderSplitCents ? (baseSplitCents + 1) : baseSplitCents;
+        splitAmount = (splitCents / 100) * signSplit;
+      }
+
       await prisma.installmentSplit.create({
         data: {
           installmentId: installment.id,
-          debtorId: splitInfo.debtorId,
-          amount: splitAmountForThisInstallment,
+          debtorId: split.debtorId,
+          amount: splitAmount,
           paid: false,
         },
       });

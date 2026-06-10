@@ -2,6 +2,7 @@ import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import TransactionsClient from '@/components/TransactionsClient';
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 
 export const revalidate = 0; // Evita cache em desenvolvimento
 
@@ -111,11 +112,13 @@ export default async function TransactionsPage() {
   }));
 
   return (
-    <TransactionsClient
-      initialTransactions={mappedTransactions}
-      cards={cards}
-      categories={categories}
-      debtors={debtors}
-    />
+    <Suspense fallback={null}>
+      <TransactionsClient
+        initialTransactions={mappedTransactions}
+        cards={cards}
+        categories={categories}
+        debtors={debtors}
+      />
+    </Suspense>
   );
 }

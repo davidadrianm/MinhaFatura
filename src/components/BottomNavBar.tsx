@@ -24,7 +24,7 @@ export default function BottomNavBar() {
         }`}
       >
         <span className="material-symbols-outlined" style={isActive('/dashboard') ? { fontVariationSettings: "'FILL' 1" } : undefined}>home</span>
-        <span className="text-[10px] mt-1">Home</span>
+        <span className="text-[10px] mt-1">Resumo</span>
       </Link>
 
       {/* Cartões */}

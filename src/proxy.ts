@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verifyToken } from './lib/auth';
+import { createServerClient } from '@supabase/ssr';
 
-export function proxy(request: NextRequest) {
-  const token = request.cookies.get('session-token')?.value;
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isAuthRoute = pathname === '/';
@@ -16,14 +15,44 @@ export function proxy(request: NextRequest) {
     pathname.startsWith('/invoices') ||
     pathname.startsWith('/categories');
 
-  // APIs que exigem login (exceto login/cadastro)
+  // APIs que exigem login (exceto login/cadastro/callback)
   const isProtectedApi =
     pathname.startsWith('/api') &&
     !pathname.startsWith('/api/auth/login') &&
-    !pathname.startsWith('/api/auth/register');
+    !pathname.startsWith('/api/auth/register') &&
+    !pathname.startsWith('/api/auth/callback');
 
-  const payload = token ? verifyToken(token) : null;
-  const isAuthenticated = !!payload;
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  const { data: { user } } = await supabase.auth.getUser();
+  const isAuthenticated = !!user;
 
   if (isProtectedRoute && !isAuthenticated) {
     // Redireciona para o Login
@@ -42,7 +71,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {

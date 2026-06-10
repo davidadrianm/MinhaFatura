@@ -1,14 +1,17 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST() {
-  const response = NextResponse.json({ success: true });
-  
-  // Limpa o cookie deletando-o ou expirando-o imediatamente
-  response.cookies.set('session-token', '', {
-    httpOnly: true,
-    expires: new Date(0),
-    path: '/',
-  });
+  try {
+    const supabase = await createClient();
+    await supabase.auth.signOut();
 
-  return response;
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Erro no logout:', error);
+    return NextResponse.json(
+      { success: false, error: 'Ocorreu um erro interno ao deslogar' },
+      { status: 500 }
+    );
+  }
 }

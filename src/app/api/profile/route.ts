@@ -70,6 +70,15 @@ export async function PUT(request: Request) {
     // 1. Atualização de dados pessoais
     if (name) updateData.name = name;
     if (email && email !== user.email) {
+      // Validação do formato do e-mail no back-end
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        return NextResponse.json(
+          { success: false, error: 'Formato de e-mail inválido' },
+          { status: 400 }
+        );
+      }
+
       // Verifica se o email já está em uso por outro usuário
       const existingUser = await prisma.user.findUnique({
         where: { email },
@@ -94,15 +103,55 @@ export async function PUT(request: Request) {
       updateData.theme = theme;
     }
 
+    let passwordUpdated = false;
+
     // 3. Alteração de senha
     if (currentPassword && newPassword) {
-      if (!comparePassword(currentPassword, user.password)) {
+      // Validação de segurança para a nova senha no back-end
+      if (newPassword.length < 6) {
+        return NextResponse.json(
+          { success: false, error: 'A nova senha deve ter no mínimo 6 caracteres' },
+          { status: 400 }
+        );
+      }
+
+      const specialCharRegex = /[^a-zA-Z0-9]/;
+      if (!specialCharRegex.test(newPassword)) {
+        return NextResponse.json(
+          { success: false, error: 'A nova senha deve conter pelo menos um caractere especial' },
+          { status: 400 }
+        );
+      }
+
+      const { createClient } = await import('@/lib/supabase/server');
+      const supabase = await createClient();
+
+      // Verifica se a senha atual está correta tentando autenticar novamente
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+
+      if (verifyError) {
         return NextResponse.json(
           { success: false, error: 'Senha atual incorreta' },
           { status: 400 }
         );
       }
-      updateData.password = hashPassword(newPassword);
+
+      // Atualiza para a nova senha
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        return NextResponse.json(
+          { success: false, error: updateError.message },
+          { status: 400 }
+        );
+      }
+
+      passwordUpdated = true;
     } else if (newPassword || currentPassword) {
       return NextResponse.json(
         { success: false, error: 'Para alterar a senha, informe a senha atual e a nova senha' },
@@ -110,21 +159,17 @@ export async function PUT(request: Request) {
       );
     }
 
-    if (Object.keys(updateData).length === 0) {
+    if (Object.keys(updateData).length === 0 && !passwordUpdated) {
       return NextResponse.json({ success: false, error: 'Nenhum dado enviado para atualização' }, { status: 400 });
     }
 
-    const updatedUser = await prisma.user.update({
-      where: { id: session.userId },
-      data: updateData,
-    });
-
-    // Gera um novo token com os dados atualizados
-    const token = signToken({
-      userId: updatedUser.id,
-      email: updatedUser.email,
-      name: updatedUser.name,
-    });
+    let updatedUser = user;
+    if (Object.keys(updateData).length > 0) {
+      updatedUser = await prisma.user.update({
+        where: { id: session.userId },
+        data: updateData,
+      });
+    }
 
     const response = NextResponse.json({
       success: true,
@@ -136,15 +181,6 @@ export async function PUT(request: Request) {
         theme: updatedUser.theme,
         createdAt: updatedUser.createdAt,
       },
-    });
-
-    // Define o novo cookie de sessão com os dados atualizados
-    response.cookies.set('session-token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 dias
-      path: '/',
     });
 
     // Define o cookie de tema
@@ -188,11 +224,13 @@ export async function DELETE(request: Request) {
 
       // Recria as categorias padrão
       const defaultCategories = [
-        { name: 'Mercado', color: '#10b981' },
-        { name: 'Combustível', color: '#f59e0b' },
+        { name: 'Alimentação', color: '#ef4444' },
+        { name: 'Assinaturas', color: '#3b82f6' },
+        { name: 'Gastos Esporádicos', color: '#f97316' },
         { name: 'Lazer', color: '#ec4899' },
-        { name: 'Assinaturas & Serviços', color: '#3b82f6' },
-        { name: 'Restaurante / Alimentação', color: '#ef4444' },
+        { name: 'Moradia', color: '#8b5cf6' },
+        { name: 'Telecomunicação', color: '#06b6d4' },
+        { name: 'Transporte', color: '#10b981' },
         { name: 'Outros', color: '#71717a' },
       ];
 

@@ -21,7 +21,22 @@ export default function ProfilePage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'info' | 'appearance' | 'security' | 'reset'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'parameters' | 'security' | 'reset'>('info');
+  const [activeSubTab, setActiveSubTab] = useState<'appearance' | 'preferences' | 'notifications'>('appearance');
+
+  // Form states for general preferences
+  const [currency, setCurrency] = useState('BRL');
+  const [centRounding, setCentRounding] = useState('first');
+  const [allowNegative, setAllowNegative] = useState(false);
+  const [prefSuccess, setPrefSuccess] = useState('');
+  const [prefError, setPrefError] = useState('');
+
+  // Form states for notification preferences
+  const [notifyInvoiceClose, setNotifyInvoiceClose] = useState(true);
+  const [notifyLimitExceeded, setNotifyLimitExceeded] = useState(true);
+  const [notifyMonthlyReport, setNotifyMonthlyReport] = useState(false);
+  const [notifSuccess, setNotifSuccess] = useState('');
+  const [notifError, setNotifError] = useState('');
 
   // Form states for profile info
   const [name, setName] = useState('');
@@ -58,7 +73,60 @@ export default function ProfilePage() {
 
   useEffect(() => {
     fetchProfile();
+
+    // Load preferences from localStorage on client-side mount
+    if (typeof window !== 'undefined') {
+      const storedCurrency = localStorage.getItem('pref_currency');
+      if (storedCurrency) setCurrency(storedCurrency);
+
+      const storedCentRounding = localStorage.getItem('pref_cent_rounding');
+      if (storedCentRounding) setCentRounding(storedCentRounding);
+
+      const storedAllowNegative = localStorage.getItem('pref_allow_negative');
+      if (storedAllowNegative) setAllowNegative(storedAllowNegative === 'true');
+
+      const storedNotifyInvoice = localStorage.getItem('pref_notify_invoice_close');
+      if (storedNotifyInvoice) setNotifyInvoiceClose(storedNotifyInvoice === 'true');
+
+      const storedNotifyLimit = localStorage.getItem('pref_notify_limit_exceeded');
+      if (storedNotifyLimit) setNotifyLimitExceeded(storedNotifyLimit === 'true');
+
+      const storedNotifyReport = localStorage.getItem('pref_notify_monthly_report');
+      if (storedNotifyReport) setNotifyMonthlyReport(storedNotifyReport === 'true');
+    }
   }, []);
+
+  const handleSavePreferences = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPrefSuccess('');
+    setPrefError('');
+
+    try {
+      localStorage.setItem('pref_currency', currency);
+      localStorage.setItem('pref_cent_rounding', centRounding);
+      localStorage.setItem('pref_allow_negative', allowNegative.toString());
+      setPrefSuccess('Parâmetros de preferências salvos com sucesso!');
+      setTimeout(() => setPrefSuccess(''), 3000);
+    } catch (err) {
+      setPrefError('Erro ao salvar parâmetros locais.');
+    }
+  };
+
+  const handleSaveNotifications = (e: React.FormEvent) => {
+    e.preventDefault();
+    setNotifSuccess('');
+    setNotifError('');
+
+    try {
+      localStorage.setItem('pref_notify_invoice_close', notifyInvoiceClose.toString());
+      localStorage.setItem('pref_notify_limit_exceeded', notifyLimitExceeded.toString());
+      localStorage.setItem('pref_notify_monthly_report', notifyMonthlyReport.toString());
+      setNotifSuccess('Configurações de notificações salvas com sucesso!');
+      setTimeout(() => setNotifSuccess(''), 3000);
+    } catch (err) {
+      setNotifError('Erro ao salvar preferências de notificações.');
+    }
+  };
 
   const fetchProfile = async () => {
     try {
@@ -114,9 +182,17 @@ export default function ProfilePage() {
 
   const handleUpdateInfo = async (e: React.FormEvent) => {
     e.preventDefault();
-    setInfoLoading(true);
     setInfoError('');
     setInfoSuccess('');
+
+    // Validação de e-mail no front-end
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setInfoError('Por favor, insira um e-mail válido.');
+      return;
+    }
+
+    setInfoLoading(true);
 
     try {
       const res = await fetch('/api/profile', {
@@ -142,15 +218,26 @@ export default function ProfilePage() {
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPassLoading(true);
     setPassError('');
     setPassSuccess('');
 
-    if (newPassword !== confirmPassword) {
-      setPassError('A nova senha e a confirmação de senha não coincidem.');
-      setPassLoading(false);
+    if (newPassword.length < 6) {
+      setPassError('A nova senha deve ter no mínimo 6 caracteres.');
       return;
     }
+
+    const specialCharRegex = /[^a-zA-Z0-9]/;
+    if (!specialCharRegex.test(newPassword)) {
+      setPassError('A nova senha deve conter pelo menos um caractere especial (ex: !, @, #, $, etc.).');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPassError('A nova senha e a confirmação de senha não coincidem.');
+      return;
+    }
+
+    setPassLoading(true);
 
     try {
       const res = await fetch('/api/profile', {
@@ -330,15 +417,15 @@ export default function ProfilePage() {
             Dados Pessoais
           </button>
           <button
-            onClick={() => setActiveTab('appearance')}
+            onClick={() => setActiveTab('parameters')}
             className={`flex-1 py-md px-lg text-label-md font-label-md text-center border-b-2 font-bold cursor-pointer transition-all flex items-center justify-center gap-xs select-none ${
-              activeTab === 'appearance'
+              activeTab === 'parameters'
                 ? 'border-secondary text-secondary bg-surface-container-lowest'
                 : 'border-transparent text-on-surface-variant opacity-75 hover:bg-surface-container-high/40'
             }`}
           >
-            <span className="material-symbols-outlined text-[20px]">palette</span>
-            Aparência
+            <span className="material-symbols-outlined text-[20px]">settings</span>
+            Parâmetros
           </button>
           <button
             onClick={() => setActiveTab('security')}
@@ -432,92 +519,296 @@ export default function ProfilePage() {
             </form>
           )}
 
-          {/* Aba 2: Aparência (Tema) */}
-          {activeTab === 'appearance' && (
+          {/* Aba 2: Parâmetros (Aparência, Preferências Gerais, Notificações) */}
+          {activeTab === 'parameters' && (
             <div className="space-y-md animate-fade-in">
               <div className="space-y-1">
-                <h3 className="text-headline-sm font-bold text-on-surface">Aparência do Sistema</h3>
-                <p className="text-label-md text-on-surface-variant">Escolha o seu tema padrão para navegação no MinhaFatura.</p>
+                <h3 className="text-headline-sm font-bold text-on-surface">Parâmetros do Sistema</h3>
+                <p className="text-label-md text-on-surface-variant">Configure temas, moedas e regras do seu gerenciador financeiro.</p>
               </div>
 
-              {themeSuccess && (
-                <div className="bg-tertiary-container/30 text-on-tertiary-container text-xs px-4 py-3 rounded-lg border border-tertiary-container flex items-center gap-xs animate-fade-in">
-                  <span className="material-symbols-outlined text-base">check_circle</span>
-                  <span>{themeSuccess}</span>
+              {/* Sub-navegação interna */}
+              <div className="flex gap-xs border-b border-outline-variant/15 pb-2 mb-md mt-sm select-none">
+                <button
+                  type="button"
+                  onClick={() => setActiveSubTab('appearance')}
+                  className={`px-md py-base text-label-md font-bold rounded-lg cursor-pointer transition-colors ${
+                    activeSubTab === 'appearance'
+                      ? 'bg-secondary/10 text-secondary'
+                      : 'text-on-surface-variant hover:bg-surface-container-low'
+                  }`}
+                >
+                  Aparência
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSubTab('preferences')}
+                  className={`px-md py-base text-label-md font-bold rounded-lg cursor-pointer transition-colors ${
+                    activeSubTab === 'preferences'
+                      ? 'bg-secondary/10 text-secondary'
+                      : 'text-on-surface-variant hover:bg-surface-container-low'
+                  }`}
+                >
+                  Preferências Gerais
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSubTab('notifications')}
+                  className={`px-md py-base text-label-md font-bold rounded-lg cursor-pointer transition-colors ${
+                    activeSubTab === 'notifications'
+                      ? 'bg-secondary/10 text-secondary'
+                      : 'text-on-surface-variant hover:bg-surface-container-low'
+                  }`}
+                >
+                  Notificações
+                </button>
+              </div>
+
+              {/* Sub-Aba 2.1: Aparência */}
+              {activeSubTab === 'appearance' && (
+                <div className="space-y-md animate-fade-in">
+                  <div className="space-y-1">
+                    <h4 className="text-body-lg font-bold text-on-surface">Aparência do Tema</h4>
+                    <p className="text-label-md text-on-surface-variant">Escolha o tema de navegação padrão.</p>
+                  </div>
+
+                  {themeSuccess && (
+                    <div className="bg-tertiary-container/30 text-on-tertiary-container text-xs px-4 py-3 rounded-lg border border-tertiary-container flex items-center gap-xs animate-fade-in">
+                      <span className="material-symbols-outlined text-base">check_circle</span>
+                      <span>{themeSuccess}</span>
+                    </div>
+                  )}
+
+                  {themeError && (
+                    <div className="bg-error-container text-on-error-container text-xs px-4 py-3 rounded-lg border border-error/10 flex items-center gap-xs animate-fade-in">
+                      <span className="material-symbols-outlined text-base">error</span>
+                      <span>{themeError}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-md pt-sm">
+                    {/* Tema Claro */}
+                    <button
+                      type="button"
+                      onClick={() => handleSaveTheme('light')}
+                      className={`p-lg border rounded-xl flex flex-col items-center gap-sm cursor-pointer select-none transition-all duration-200 text-center ${
+                        selectedTheme === 'light'
+                          ? 'border-secondary bg-secondary/5 ring-1 ring-secondary'
+                          : 'border-outline-variant/35 hover:bg-surface-container-low/40'
+                      }`}
+                    >
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                        selectedTheme === 'light' ? 'bg-secondary text-on-secondary' : 'bg-surface-container text-on-surface-variant'
+                      }`}>
+                        <span className="material-symbols-outlined text-[24px]">light_mode</span>
+                      </div>
+                      <div>
+                        <span className="block text-label-md font-bold text-on-surface">Modo Claro</span>
+                        <span className="block text-label-sm text-on-surface-variant mt-xs">Aparência padrão com fundo claro.</span>
+                      </div>
+                    </button>
+
+                    {/* Tema Escuro */}
+                    <button
+                      type="button"
+                      onClick={() => handleSaveTheme('dark')}
+                      className={`p-lg border rounded-xl flex flex-col items-center gap-sm cursor-pointer select-none transition-all duration-200 text-center ${
+                        selectedTheme === 'dark'
+                          ? 'border-secondary bg-secondary/5 ring-1 ring-secondary'
+                          : 'border-outline-variant/35 hover:bg-surface-container-low/40'
+                      }`}
+                    >
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                        selectedTheme === 'dark' ? 'bg-secondary text-on-secondary' : 'bg-surface-container text-on-surface-variant'
+                      }`}>
+                        <span className="material-symbols-outlined text-[24px]">dark_mode</span>
+                      </div>
+                      <div>
+                        <span className="block text-label-md font-bold text-on-surface">Modo Escuro</span>
+                        <span className="block text-label-sm text-on-surface-variant mt-xs">Aparência escura, confortável para leitura.</span>
+                      </div>
+                    </button>
+
+                    {/* Tema do Sistema */}
+                    <button
+                      type="button"
+                      onClick={() => handleSaveTheme('system')}
+                      className={`p-lg border rounded-xl flex flex-col items-center gap-sm cursor-pointer select-none transition-all duration-200 text-center ${
+                        selectedTheme === 'system'
+                          ? 'border-secondary bg-secondary/5 ring-1 ring-secondary'
+                          : 'border-outline-variant/35 hover:bg-surface-container-low/40'
+                      }`}
+                    >
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                        selectedTheme === 'system' ? 'bg-secondary text-on-secondary' : 'bg-surface-container text-on-surface-variant'
+                      }`}>
+                        <span className="material-symbols-outlined text-[24px]">desktop_windows</span>
+                      </div>
+                      <div>
+                        <span className="block text-label-md font-bold text-on-surface">Usar Sistema</span>
+                        <span className="block text-label-sm text-on-surface-variant mt-xs">Sincroniza com as preferências do dispositivo.</span>
+                      </div>
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {themeError && (
-                <div className="bg-error-container text-on-error-container text-xs px-4 py-3 rounded-lg border border-error/10 flex items-center gap-xs animate-fade-in">
-                  <span className="material-symbols-outlined text-base">error</span>
-                  <span>{themeError}</span>
-                </div>
+              {/* Sub-Aba 2.2: Preferências Gerais */}
+              {activeSubTab === 'preferences' && (
+                <form onSubmit={handleSavePreferences} className="space-y-md animate-fade-in">
+                  <div className="space-y-1">
+                    <h4 className="text-body-lg font-bold text-on-surface">Preferências Gerais</h4>
+                    <p className="text-label-md text-on-surface-variant">Configure os valores padrão aplicados em novas faturas e lançamentos.</p>
+                  </div>
+
+                  {prefSuccess && (
+                    <div className="bg-tertiary-container/30 text-on-tertiary-container text-xs px-4 py-3 rounded-lg border border-tertiary-container flex items-center gap-xs animate-fade-in">
+                      <span className="material-symbols-outlined text-base">check_circle</span>
+                      <span>{prefSuccess}</span>
+                    </div>
+                  )}
+
+                  {prefError && (
+                    <div className="bg-error-container text-on-error-container text-xs px-4 py-3 rounded-lg border border-error/10 flex items-center gap-xs animate-fade-in">
+                      <span className="material-symbols-outlined text-base">error</span>
+                      <span>{prefError}</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-md pt-sm">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+                      {/* Moeda Padrão */}
+                      <div className="space-y-xs">
+                        <label className="block text-label-sm font-label-sm text-on-surface-variant">Moeda do Sistema</label>
+                        <select
+                          value={currency}
+                          onChange={(e) => setCurrency(e.target.value)}
+                          className="w-full bg-surface border border-outline-variant text-body-md font-body-md text-on-surface rounded-lg py-sm px-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm transition-all"
+                        >
+                          <option value="BRL">Real (R$)</option>
+                          <option value="USD">Dólar ($)</option>
+                          <option value="EUR">Euro (€)</option>
+                        </select>
+                      </div>
+
+                      {/* Arredondamento de Centavos */}
+                      <div className="space-y-xs">
+                        <label className="block text-label-sm font-label-sm text-on-surface-variant">Arredondamento de Centavos</label>
+                        <select
+                          value={centRounding}
+                          onChange={(e) => setCentRounding(e.target.value)}
+                          className="w-full bg-surface border border-outline-variant text-body-md font-body-md text-on-surface rounded-lg py-sm px-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm transition-all"
+                        >
+                          <option value="first">Primeira Parcela (Padrão)</option>
+                          <option value="last">Última Parcela</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Valor negativo na transação */}
+                    <label className="flex items-center gap-sm p-sm bg-surface-container-low/40 border border-outline-variant/20 rounded-xl cursor-pointer select-none hover:bg-surface-container-low transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={allowNegative}
+                        onChange={(e) => setAllowNegative(e.target.checked)}
+                        className="h-5 w-5 accent-secondary shrink-0"
+                      />
+                      <div>
+                        <span className="block text-label-md font-bold text-on-surface">Valor negativo na transação</span>
+                        <span className="block text-label-sm text-on-surface-variant mt-xs">Permitir a inserção de valores negativos (-) ao cadastrar ou editar transações.</span>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="flex justify-end pt-md border-t border-outline-variant/10">
+                    <button
+                      type="submit"
+                      className="px-lg py-sm bg-secondary text-on-secondary font-label-md text-label-md rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-sm flex items-center gap-xs cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">save</span>
+                      <span>Salvar Parâmetros</span>
+                    </button>
+                  </div>
+                </form>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-md pt-sm">
-                {/* Tema Claro */}
-                <button
-                  type="button"
-                  onClick={() => handleSaveTheme('light')}
-                  className={`p-lg border rounded-xl flex flex-col items-center gap-sm cursor-pointer select-none transition-all duration-200 text-center ${
-                    selectedTheme === 'light'
-                      ? 'border-secondary bg-secondary/5 ring-1 ring-secondary'
-                      : 'border-outline-variant/35 hover:bg-surface-container-low/40'
-                  }`}
-                >
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                    selectedTheme === 'light' ? 'bg-secondary text-on-secondary' : 'bg-surface-container text-on-surface-variant'
-                  }`}>
-                    <span className="material-symbols-outlined text-[24px]">light_mode</span>
+              {/* Sub-Aba 2.3: Notificações */}
+              {activeSubTab === 'notifications' && (
+                <form onSubmit={handleSaveNotifications} className="space-y-md animate-fade-in">
+                  <div className="space-y-1">
+                    <h4 className="text-body-lg font-bold text-on-surface">Notificações e Alertas</h4>
+                    <p className="text-label-md text-on-surface-variant">Ative lembretes automáticos e relatórios mensais por e-mail.</p>
                   </div>
-                  <div>
-                    <span className="block text-label-md font-bold text-on-surface">Modo Claro</span>
-                    <span className="block text-label-sm text-on-surface-variant mt-xs">Aparência padrão com fundo claro e alto contraste de leitura.</span>
-                  </div>
-                </button>
 
-                {/* Tema Escuro */}
-                <button
-                  type="button"
-                  onClick={() => handleSaveTheme('dark')}
-                  className={`p-lg border rounded-xl flex flex-col items-center gap-sm cursor-pointer select-none transition-all duration-200 text-center ${
-                    selectedTheme === 'dark'
-                      ? 'border-secondary bg-secondary/5 ring-1 ring-secondary'
-                      : 'border-outline-variant/35 hover:bg-surface-container-low/40'
-                  }`}
-                >
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                    selectedTheme === 'dark' ? 'bg-secondary text-on-secondary' : 'bg-surface-container text-on-surface-variant'
-                  }`}>
-                    <span className="material-symbols-outlined text-[24px]">dark_mode</span>
-                  </div>
-                  <div>
-                    <span className="block text-label-md font-bold text-on-surface">Modo Escuro</span>
-                    <span className="block text-label-sm text-on-surface-variant mt-xs">Aparência escura, ideal para ambientes de baixa iluminação.</span>
-                  </div>
-                </button>
+                  {notifSuccess && (
+                    <div className="bg-tertiary-container/30 text-on-tertiary-container text-xs px-4 py-3 rounded-lg border border-tertiary-container flex items-center gap-xs animate-fade-in">
+                      <span className="material-symbols-outlined text-base">check_circle</span>
+                      <span>{notifSuccess}</span>
+                    </div>
+                  )}
 
-                {/* Tema do Sistema */}
-                <button
-                  type="button"
-                  onClick={() => handleSaveTheme('system')}
-                  className={`p-lg border rounded-xl flex flex-col items-center gap-sm cursor-pointer select-none transition-all duration-200 text-center ${
-                    selectedTheme === 'system'
-                      ? 'border-secondary bg-secondary/5 ring-1 ring-secondary'
-                      : 'border-outline-variant/35 hover:bg-surface-container-low/40'
-                  }`}
-                >
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                    selectedTheme === 'system' ? 'bg-secondary text-on-secondary' : 'bg-surface-container text-on-surface-variant'
-                  }`}>
-                    <span className="material-symbols-outlined text-[24px]">desktop_windows</span>
+                  {notifError && (
+                    <div className="bg-error-container text-on-error-container text-xs px-4 py-3 rounded-lg border border-error/10 flex items-center gap-xs animate-fade-in">
+                      <span className="material-symbols-outlined text-base">error</span>
+                      <span>{notifError}</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-sm pt-sm">
+                    {/* Alerta de Fechamento */}
+                    <label className="flex items-center gap-sm p-sm bg-surface-container-low/40 border border-outline-variant/20 rounded-xl cursor-pointer select-none hover:bg-surface-container-low transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={notifyInvoiceClose}
+                        onChange={(e) => setNotifyInvoiceClose(e.target.checked)}
+                        className="h-5 w-5 accent-secondary shrink-0"
+                      />
+                      <div>
+                        <span className="block text-label-md font-bold text-on-surface">Lembrete de Fechamento de Faturas</span>
+                        <span className="block text-label-sm text-on-surface-variant mt-xs">Avisar por e-mail 3 dias antes do fechamento de faturas de qualquer cartão.</span>
+                      </div>
+                    </label>
+
+                    {/* Alerta de Limite */}
+                    <label className="flex items-center gap-sm p-sm bg-surface-container-low/40 border border-outline-variant/20 rounded-xl cursor-pointer select-none hover:bg-surface-container-low transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={notifyLimitExceeded}
+                        onChange={(e) => setNotifyLimitExceeded(e.target.checked)}
+                        className="h-5 w-5 accent-secondary shrink-0"
+                      />
+                      <div>
+                        <span className="block text-label-md font-bold text-on-surface">Alerta de Limite de Gastos</span>
+                        <span className="block text-label-sm text-on-surface-variant mt-xs">Notificar caso a fatura acumulada atinja 85% do limite disponível no cartão.</span>
+                      </div>
+                    </label>
+
+                    {/* Relatório Consolidado */}
+                    <label className="flex items-center gap-sm p-sm bg-surface-container-low/40 border border-outline-variant/20 rounded-xl cursor-pointer select-none hover:bg-surface-container-low transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={notifyMonthlyReport}
+                        onChange={(e) => setNotifyMonthlyReport(e.target.checked)}
+                        className="h-5 w-5 accent-secondary shrink-0"
+                      />
+                      <div>
+                        <span className="block text-label-md font-bold text-on-surface">Relatório Mensal Consolidado</span>
+                        <span className="block text-label-sm text-on-surface-variant mt-xs">Enviar por e-mail um resumo visual e análise de gastos ao fim de cada mês.</span>
+                      </div>
+                    </label>
                   </div>
-                  <div>
-                    <span className="block text-label-md font-bold text-on-surface">Usar Sistema</span>
-                    <span className="block text-label-sm text-on-surface-variant mt-xs">Sincroniza automaticamente a aparência com o tema do seu dispositivo.</span>
+
+                  <div className="flex justify-end pt-md border-t border-outline-variant/10">
+                    <button
+                      type="submit"
+                      className="px-lg py-sm bg-secondary text-on-secondary font-label-md text-label-md rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-sm flex items-center gap-xs cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">save</span>
+                      <span>Salvar Configuração</span>
+                    </button>
                   </div>
-                </button>
-              </div>
+                </form>
+              )}
             </div>
           )}
 
