@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -42,7 +43,10 @@ export default async function RootLayout({
           } catch (_) {}
         ` }} />
       </head>
-      <body suppressHydrationWarning className="min-h-full flex flex-col bg-background text-on-background">{children}</body>
+      <body suppressHydrationWarning className="min-h-full flex flex-col bg-background text-on-background">
+        {children}
+        <SpeedInsights />
+      </body>
     </html>
   );
 }
