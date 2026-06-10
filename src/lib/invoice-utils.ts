@@ -271,11 +271,22 @@ export async function createInstallmentsForTransaction(transactionId: string): P
   }
 }
 
+// Cache em memória para evitar rodar a verificação pesada no banco em toda requisição de página/layout
+const lastCheckedUsers = new Map<string, number>();
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
+
 /**
  * Garante que todas as transações recorrentes ativas tenham sempre um saldo de faturamento de 12 meses futuros,
  * criando uma nova parcela no final a cada mês que se passa.
  */
 export async function ensureRecurringTransactions(userId: string): Promise<void> {
+  const nowMs = Date.now();
+  const lastCheck = lastCheckedUsers.get(userId);
+  if (lastCheck && nowMs - lastCheck < CACHE_TTL_MS) {
+    return;
+  }
+  lastCheckedUsers.set(userId, nowMs);
+
   const now = new Date();
   const currentMonth = now.getUTCMonth(); // 0-indexed (Jan = 0)
   const currentYear = now.getUTCFullYear();

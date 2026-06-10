@@ -42,7 +42,7 @@ const isLightColor = (hexColor: string) => {
   return yiq >= 150;
 };
 
-const getCardStyle = (bank: string, cardColor?: string) => {
+const getCardStyle = (bank: string, brand: string, cardColor?: string) => {
   const colorVal = cardColor || bankPresets[bank] || '#712ae2';
   const isLight = isLightColor(colorVal);
   
@@ -50,12 +50,46 @@ const getCardStyle = (bank: string, cardColor?: string) => {
   const tagBgClass = isLight ? 'bg-black/10 border-black/20' : 'bg-white/10 border-white/30';
   const chipLogoBgClass = isLight ? 'bg-black/15' : 'bg-white/20';
   
-  const fakeLogo = (
-    <div className={`w-10 h-6 ${chipLogoBgClass} rounded relative`}>
-      <div className="absolute w-4 h-4 rounded-full bg-error/70 left-1 top-1 mix-blend-multiply"></div>
-      <div className="absolute w-4 h-4 rounded-full bg-secondary-container/70 right-1 top-1 mix-blend-multiply"></div>
-    </div>
-  );
+  // Renderiza um logo simplificado e premium para cada bandeira usando SVGs reais
+  let fakeLogo;
+  const brandName = brand.toLowerCase();
+  
+  if (brandName === 'visa') {
+    const visaColor = isLight ? '#1A1F71' : '#FFFFFF';
+    fakeLogo = (
+      <svg viewBox="0 0 24 24" width="36" height="24" fill={visaColor} xmlns="http://www.w3.org/2000/svg" className="shrink-0 select-none">
+        <path d="M9.112 8.262L5.97 15.758H3.92L2.374 9.775c-.094-.368-.175-.503-.461-.658C1.447 8.864.677 8.627 0 8.479l.046-.217h3.3a.904.904 0 01.894.764l.817 4.338 2.018-5.102zm8.033 5.049c.008-1.979-2.736-2.088-2.717-2.972.006-.269.262-.555.822-.628a3.66 3.66 0 011.913.336l.34-1.59a5.207 5.207 0 00-1.814-.333c-1.917 0-3.266 1.02-3.278 2.479-.012 1.079.963 1.68 1.698 2.04.756.367 1.01.603 1.006.931-.005.504-.602.725-1.16.734-.975.015-1.54-.263-1.992-.473l-.351 1.642c.453.208 1.289.39 2.156.398 2.037 0 3.37-1.006 3.377-2.564m5.061 2.447H24l-1.565-7.496h-1.656a.883.883 0 00-.826.55l-2.909 6.946h2.036l.405-1.12h2.488zm-2.163-2.656l1.02-2.815.588 2.815zm-8.16-4.84l-1.603 7.496H8.34l1.605-7.496z"/>
+      </svg>
+    );
+  } else if (brandName === 'mastercard') {
+    fakeLogo = (
+      <svg viewBox="0 0 36 24" width="36" height="24" xmlns="http://www.w3.org/2000/svg" className="shrink-0 select-none">
+        <circle cx="13" cy="12" r="10" fill="#EB001B" />
+        <circle cx="23" cy="12" r="10" fill="#F79E1B" fillOpacity="0.8" />
+      </svg>
+    );
+  } else if (brandName === 'elo') {
+    const eloColor = isLight ? '#1C1B1F' : '#FFFFFF';
+    fakeLogo = (
+      <svg viewBox="0 0 42 24" width="42" height="24" xmlns="http://www.w3.org/2000/svg" className="shrink-0 select-none">
+        <text x="3" y="16" fontFamily="sans-serif" fontWeight="900" fontStyle="italic" fontSize="12" fill={eloColor}>elo</text>
+        <circle cx="22" cy="12" r="3.5" fill="#F5A623" />
+        <circle cx="28" cy="12" r="3.5" fill="#D0021B" />
+        <circle cx="34" cy="12" r="3.5" fill="#4A90E2" />
+      </svg>
+    );
+  } else if (brandName === 'amex') {
+    fakeLogo = (
+      <svg viewBox="0 0 36 24" width="36" height="24" xmlns="http://www.w3.org/2000/svg" className="shrink-0 select-none">
+        <rect width="36" height="24" rx="4" fill="#0070CD" />
+        <text x="18" y="15" fontFamily="monospace" fontSize="8" fontWeight="900" fill="#FFFFFF" textAnchor="middle" letterSpacing="0.5">AMEX</text>
+      </svg>
+    );
+  } else {
+    fakeLogo = (
+      <span className="material-symbols-outlined text-[20px] opacity-70">credit_card</span>
+    );
+  }
   
   return {
     bgStyle: { backgroundColor: colorVal },
@@ -93,6 +127,25 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
   const [bankName, setBankName] = useState('Nubank');
   const [brand, setBrand] = useState('Mastercard');
   const [limit, setLimit] = useState('');
+  const [limitFormatted, setLimitFormatted] = useState('');
+  
+  const handleLimitChange = (val: string) => {
+    const digits = val.replace(/\D/g, '');
+    if (!digits) {
+      setLimit('');
+      setLimitFormatted('');
+      return;
+    }
+    const numValue = parseInt(digits, 10) / 100;
+    setLimit(numValue.toFixed(2));
+    setLimitFormatted(
+      numValue.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    );
+  };
+
   const [closingDay, setClosingDay] = useState('25');
   const [dueDay, setDueDay] = useState('5');
   const [color, setColor] = useState('#8D0DE3'); // Preset for Nubank
@@ -114,7 +167,8 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
     setName(card.name);
     setBankName(card.bankName);
     setBrand(card.brand);
-    setLimit(card.limit.toString());
+    setLimit(card.limit.toFixed(2));
+    setLimitFormatted(card.limit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     setClosingDay(card.closingDay.toString());
     setDueDay(card.dueDay.toString());
     setColor(card.color || bankPresets[card.bankName] || '#712ae2');
@@ -129,6 +183,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
     setBankName('Nubank');
     setBrand('Mastercard');
     setLimit('');
+    setLimitFormatted('');
     setClosingDay('25');
     setDueDay('5');
     setColor('#8D0DE3');
@@ -172,6 +227,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
       } else {
         setName('');
         setLimit('');
+        setLimitFormatted('');
         setShareLimit(false);
         setParentCardId('');
         // Recarregar os cartões da API
@@ -318,7 +374,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
 
               const limitAvailable = displayLimit - displayLimitUsed;
               const percentageUsed = displayLimit > 0 ? (displayLimitUsed / displayLimit) * 100 : 0;
-              const cardTheme = getCardStyle(card.bankName, card.color);
+              const cardTheme = getCardStyle(card.bankName, card.brand, card.color);
 
               return (
                 <div 
@@ -444,7 +500,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
           <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider text-center">Visualização do Cartão</p>
           
           {(() => {
-            const previewTheme = getCardStyle(bankName, color);
+            const previewTheme = getCardStyle(bankName, brand, color);
             return (
               <div className={`${previewTheme.textColorClass} rounded-[16px] p-md aspect-[1.58] flex flex-col justify-between relative overflow-hidden shadow-xl transition-all duration-500`} style={previewTheme.bgStyle}>
                 <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white to-transparent pointer-events-none"></div>
@@ -514,20 +570,39 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
               </div>
             </div>
 
-            {bankName === 'Outro' && (
-              <div className="space-y-1 animate-fade-in">
-                <label className="text-label-sm font-label-sm text-on-surface-variant block">Cor do Cartão</label>
-                <div className="flex items-center gap-sm bg-surface border border-outline-variant rounded-lg p-xs">
+            <div className="space-y-1">
+              <label className="text-label-sm font-label-sm text-on-surface-variant block">Cor do Cartão</label>
+              <div className="flex items-center gap-sm">
+                {/* Quadrado de Cor Premium que abre a paleta ao clicar */}
+                <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-outline-variant shrink-0 shadow-sm transition-transform active:scale-95">
                   <input
                     type="color"
-                    value={color}
-                    onChange={(e) => setColor(e.target.value)}
-                    className="w-10 h-8 border-0 cursor-pointer p-0 bg-transparent shrink-0"
+                    value={/^#[0-9A-Fa-f]{6}$/.test(color) ? color : '#712ae2'}
+                    onChange={(e) => setColor(e.target.value.toUpperCase())}
+                    className="absolute inset-0 w-[200%] h-[200%] -translate-x-[25%] -translate-y-[25%] cursor-pointer border-0 p-0"
                   />
-                  <span className="text-body-md text-on-surface font-mono uppercase select-all">{color}</span>
+                </div>
+                {/* Input de Texto para digitar ou colar o código HEX */}
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    placeholder="Ex: #8D0DE3"
+                    value={color}
+                    onChange={(e) => {
+                      let val = e.target.value.toUpperCase();
+                      val = val.replace(/[^#0-9A-F]/g, ''); // Permite apenas Hexadecimal
+                      if (val && !val.startsWith('#')) {
+                        val = '#' + val;
+                      }
+                      if (val.length <= 7) {
+                        setColor(val);
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-md text-on-surface font-mono placeholder-on-surface-variant/40 outline-none transition-all focus:ring-2 focus:ring-secondary/20 focus:border-secondary"
+                  />
                 </div>
               </div>
-            )}
+            </div>
 
             {parentOptions.length > 0 && (
               <div className="flex items-center gap-sm bg-surface border border-outline-variant rounded-lg p-sm">
@@ -569,43 +644,99 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
             {!shareLimit && (
               <div className="space-y-1">
                 <label className="text-label-sm font-label-sm text-on-surface-variant block">Limite Total (R$)</label>
-                <input
-                  type="number"
-                  required
-                  min={0}
-                  placeholder="Ex: 5000"
-                  value={limit}
-                  onChange={(e) => setLimit(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all focus:ring-2 focus:ring-secondary/20 focus:border-secondary"
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant font-medium select-none text-body-md">R$</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="0,00"
+                    value={limitFormatted}
+                    onChange={(e) => handleLimitChange(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all focus:ring-2 focus:ring-secondary/20 focus:border-secondary"
+                  />
+                </div>
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-sm">
+              {/* Dia de Fechamento */}
               <div className="space-y-1">
                 <label className="text-label-sm font-label-sm text-on-surface-variant block">Dia Fechamento</label>
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  max={31}
-                  value={closingDay}
-                  onChange={(e) => setClosingDay(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-md text-on-surface outline-none transition-all focus:ring-2 focus:ring-secondary/20 focus:border-secondary text-center"
-                />
+                <div className="flex items-center bg-surface border border-outline-variant rounded-lg overflow-hidden h-[42px] focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all">
+                  <button
+                    type="button"
+                    onClick={() => setClosingDay(prev => Math.max(1, parseInt(prev || '1') - 1).toString())}
+                    className="h-full px-3 hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center border-r border-outline-variant/30 select-none cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">remove</span>
+                  </button>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    max={31}
+                    value={closingDay}
+                    onChange={(e) => {
+                      const valStr = e.target.value;
+                      if (valStr === '') {
+                        setClosingDay('');
+                        return;
+                      }
+                      const val = parseInt(valStr);
+                      if (!isNaN(val) && val >= 1 && val <= 31) {
+                        setClosingDay(val.toString());
+                      }
+                    }}
+                    className="w-full h-full text-center bg-transparent border-0 text-body-md text-on-surface outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setClosingDay(prev => Math.min(31, parseInt(prev || '1') + 1).toString())}
+                    className="h-full px-3 hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center border-l border-outline-variant/30 select-none cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">add</span>
+                  </button>
+                </div>
               </div>
 
+              {/* Dia de Vencimento */}
               <div className="space-y-1">
                 <label className="text-label-sm font-label-sm text-on-surface-variant block">Dia Vencimento</label>
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  max={31}
-                  value={dueDay}
-                  onChange={(e) => setDueDay(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-md text-on-surface outline-none transition-all focus:ring-2 focus:ring-secondary/20 focus:border-secondary text-center"
-                />
+                <div className="flex items-center bg-surface border border-outline-variant rounded-lg overflow-hidden h-[42px] focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all">
+                  <button
+                    type="button"
+                    onClick={() => setDueDay(prev => Math.max(1, parseInt(prev || '1') - 1).toString())}
+                    className="h-full px-3 hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center border-r border-outline-variant/30 select-none cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">remove</span>
+                  </button>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    max={31}
+                    value={dueDay}
+                    onChange={(e) => {
+                      const valStr = e.target.value;
+                      if (valStr === '') {
+                        setDueDay('');
+                        return;
+                      }
+                      const val = parseInt(valStr);
+                      if (!isNaN(val) && val >= 1 && val <= 31) {
+                        setDueDay(val.toString());
+                      }
+                    }}
+                    className="w-full h-full text-center bg-transparent border-0 text-body-md text-on-surface outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDueDay(prev => Math.min(31, parseInt(prev || '1') + 1).toString())}
+                    className="h-full px-3 hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center border-l border-outline-variant/30 select-none cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">add</span>
+                  </button>
+                </div>
               </div>
             </div>
 

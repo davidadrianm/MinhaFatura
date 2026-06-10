@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { NextRequest } from 'next/server';
+import { cache } from 'react';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'gerenciador-cartao-secret-key-12345';
 
@@ -77,7 +78,7 @@ export async function getAuthenticatedUser(
 /**
  * Utilitário para uso direto em Server Components (lendo cookies do Next.js).
  */
-export async function getSessionUser() {
+export const getSessionUser = cache(async () => {
   try {
     const { createClient } = await import('@/lib/supabase/server');
     const supabase = await createClient();
@@ -91,4 +92,4 @@ export async function getSessionUser() {
   } catch (error) {
     return null;
   }
-}
+});
