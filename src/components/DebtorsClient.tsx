@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MonthPicker from './MonthPicker';
+import { useDialog } from './DialogProvider';
 
 
 
@@ -71,6 +72,7 @@ interface DebtorsClientProps {
 }
 
 export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
+  const { confirm, alert } = useDialog();
   const [debtors, setDebtors] = useState<Debtor[]>(initialDebtors);
   const [selectedDebtorId, setSelectedDebtorId] = useState<string | null>(
     initialDebtors[0]?.id || null
@@ -89,6 +91,12 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
   const router = useRouter();
 
   const selectedDebtor = debtors.find(d => d.id === selectedDebtorId);
+
+  const pendingAmountForPeriod = selectedDebtor
+    ? selectedDebtor.installments
+        .filter(inst => !inst.debtorPaid && matchMonthFilter(filterMonth, inst.dueMonth, inst.dueYear))
+        .reduce((sum, inst) => sum + inst.debtorAmount, 0)
+    : 0;
 
   const handleAddDebtor = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,11 +136,15 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
     if (!debtorToDelete) return;
 
     if (debtorToDelete.totalAmount > 0) {
-      alert(`Não é possível excluir este devedor pois existem compras ativas atreladas a ele.`);
+      await alert(`Não é possível excluir este devedor pois existem compras ativas atreladas a ele.`, { type: 'warning' });
       return;
     }
 
-    if (!confirm(`Deseja remover ${debtorToDelete.name} do sistema?`)) {
+    const isConfirmed = await confirm(`Deseja remover ${debtorToDelete.name} do sistema?`, {
+      type: 'warning',
+      title: 'Remover Devedor',
+    });
+    if (!isConfirmed) {
       return;
     }
 
@@ -150,10 +162,10 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
         }
         router.refresh();
       } else {
-        alert(data.error || 'Erro ao excluir devedor.');
+        await alert(data.error || 'Erro ao excluir devedor.', { type: 'error' });
       }
     } catch (err) {
-      alert('Erro de conexão.');
+      await alert('Erro de conexão.', { type: 'error' });
     }
   };
 
@@ -189,10 +201,10 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
         }));
         router.refresh();
       } else {
-        alert(data.error || 'Erro ao alterar status.');
+        await alert(data.error || 'Erro ao alterar status.', { type: 'error' });
       }
     } catch (err) {
-      alert('Erro de conexão.');
+      await alert('Erro de conexão.', { type: 'error' });
     } finally {
       setTogglingId(null);
     }
@@ -232,12 +244,12 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-lg">
         
         {/* Total a Receber */}
-        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30 flex flex-col justify-between relative overflow-hidden hover:-translate-y-0.5 transition-transform duration-300">
-          <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-            <span className="material-symbols-outlined text-6xl text-secondary">account_balance</span>
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30 flex flex-col justify-between hover:-translate-y-0.5 transition-transform duration-300">
+          <div className="flex justify-between items-start">
+            <h3 className="text-label-md font-label-md text-on-surface-variant mb-2 font-medium">Total a Receber</h3>
+            <span className="material-symbols-outlined text-secondary opacity-70">payment_arrow_down</span>
           </div>
           <div>
-            <h3 className="text-label-md font-label-md text-on-surface-variant mb-2 font-medium">Total a Receber</h3>
             <div className="text-display-currency font-display-currency text-primary">
               R$ {totalReceber.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
@@ -249,12 +261,12 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
         </div>
 
         {/* Recebido */}
-        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30 flex flex-col justify-between relative overflow-hidden hover:-translate-y-0.5 transition-transform duration-300">
-          <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-            <span className="material-symbols-outlined text-6xl text-tertiary-container">check_circle</span>
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30 flex flex-col justify-between hover:-translate-y-0.5 transition-transform duration-300">
+          <div className="flex justify-between items-start">
+            <h3 className="text-label-md font-label-md text-on-surface-variant mb-2 font-medium">Total Recebido</h3>
+            <span className="material-symbols-outlined text-tertiary-container opacity-70">check_circle</span>
           </div>
           <div>
-            <h3 className="text-label-md font-label-md text-on-surface-variant mb-2 font-medium">Total Recebido</h3>
             <div className="text-display-currency font-display-currency text-on-tertiary-container">
               R$ {totalRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
@@ -268,12 +280,12 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
         </div>
 
         {/* Pendente */}
-        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30 flex flex-col justify-between relative overflow-hidden hover:-translate-y-0.5 transition-transform duration-300">
-          <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-            <span className="material-symbols-outlined text-6xl text-error">hourglass_empty</span>
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30 flex flex-col justify-between hover:-translate-y-0.5 transition-transform duration-300">
+          <div className="flex justify-between items-start">
+            <h3 className="text-label-md font-label-md text-on-surface-variant mb-2 font-medium">Total Pendente</h3>
+            <span className="material-symbols-outlined text-error opacity-70">hourglass_empty</span>
           </div>
           <div>
-            <h3 className="text-label-md font-label-md text-on-surface-variant mb-2 font-medium">Total Pendente</h3>
             <div className="text-display-currency font-display-currency text-on-surface">
               R$ {totalReceber.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
@@ -413,7 +425,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
                 <div className="text-right bg-surface-container-low border border-outline-variant/35 px-sm py-xs rounded-lg">
                   <span className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider block">Saldo Pendente</span>
                   <span className="text-headline-md font-black text-secondary">
-                    R$ {selectedDebtor.pendingAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {pendingAmountForPeriod.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>

@@ -2,6 +2,7 @@ import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { formatCalendarDate } from '@/lib/date-utils';
+import { calculateUsedLimit, getInvoiceStatus } from '@/lib/invoice-utils';
 
 export const revalidate = 0; // Evita cache em desenvolvimento
 
@@ -64,7 +65,7 @@ export default async function DashboardPage() {
   // Executa todas as consultas em paralelo para reduzir a latência de rede com o banco remoto
   const [
     cards,
-    unpaidInvoices,
+    totalLimitUsed,
     pendingDebtorsSum,
     currentMonthInvoices,
     recentTransactions,
@@ -75,12 +76,7 @@ export default async function DashboardPage() {
     prisma.creditCard.findMany({
       where: { userId: user.userId, isActive: true },
     }),
-    prisma.invoice.findMany({
-      where: {
-        userId: user.userId,
-        status: { in: ['open', 'closed', 'overdue'] }
-      }
-    }),
+    calculateUsedLimit(user.userId),
     prisma.installmentSplit.aggregate({
       where: {
         paid: false,
@@ -164,14 +160,23 @@ export default async function DashboardPage() {
     })
   ]);
 
+  const activeCurrentMonthInvoices = currentMonthInvoices.map(inv => ({
+    ...inv,
+    status: getInvoiceStatus(inv)
+  }));
+
+  const activeAlertInvoices = alertInvoices.map(inv => ({
+    ...inv,
+    status: getInvoiceStatus(inv)
+  })).filter(inv => inv.status !== 'paid');
+
   const totalLimits = cards.filter(c => !c.parentCardId).reduce((sum, card) => sum + card.limit, 0);
-  const totalLimitUsed = unpaidInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
   const availableLimit = totalLimits - totalLimitUsed;
   const totalPendingDebtors = pendingDebtorsSum._sum.amount || 0.0;
-  const currentMonthSpent = currentMonthInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+  const currentMonthSpent = activeCurrentMonthInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
 
   // Calcula o valor dos devedores nas faturas deste mês
-  const currentMonthDebtorsAmount = currentMonthInvoices.reduce((sum, inv) => {
+  const currentMonthDebtorsAmount = activeCurrentMonthInvoices.reduce((sum, inv) => {
     const invoiceDebtorsSum = inv.installments.reduce((instSum, inst) => {
       const splitSum = inst.splits ? inst.splits.reduce((sSum, split) => sSum + split.amount, 0) : 0;
       return instSum + splitSum;
@@ -294,7 +299,7 @@ export default async function DashboardPage() {
           <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between h-[136px] hover:-translate-y-0.5 transition-transform duration-300">
             <div className="flex justify-between items-start">
               <span className="text-label-md font-label-md text-on-surface-variant">Limite Disponível</span>
-              <span className="material-symbols-outlined text-tertiary-container opacity-70">account_balance_wallet</span>
+              <span className="material-symbols-outlined text-tertiary-container opacity-70">money_range</span>
             </div>
             <div>
               <span className="text-display-currency font-display-currency text-on-surface leading-none block mb-1">
@@ -369,7 +374,7 @@ export default async function DashboardPage() {
           
           <div className="flex-1 overflow-y-auto pr-1 -mr-1 space-y-xs scrollbar-thin">
             {cards.map((card) => {
-              const invoice = currentMonthInvoices.find(inv => inv.cardId === card.id);
+              const invoice = activeCurrentMonthInvoices.find(inv => inv.cardId === card.id);
               const invoiceAmount = invoice ? invoice.totalAmount : 0.0;
               const status = invoice ? invoice.status : 'open';
               const bankInfo = getBankIcon(card.bankName, card.color || undefined);
@@ -401,7 +406,7 @@ export default async function DashboardPage() {
                         ? 'bg-tertiary-fixed text-on-tertiary-container'
                         : 'bg-surface-container-highest text-on-surface-variant'
                     }`}>
-                      {status === 'overdue' ? 'Vencida' : status === 'closed' ? 'Fechada' : status === 'paid' ? 'Paga' : 'Aberta'}
+                      {status === 'overdue' ? 'Vencida' : status === 'closed' ? 'Fechada' : status === 'paid' ? 'Pago' : 'Aberta'}
                     </span>
                   </div>
                 </div>
@@ -418,14 +423,14 @@ export default async function DashboardPage() {
       </div>
 
       {/* Alertas de Vencimento */}
-      {alertInvoices.length > 0 && (
+      {activeAlertInvoices.length > 0 && (
         <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] space-y-sm">
           <h3 className="text-body-lg font-body-lg font-bold text-on-surface flex items-center gap-xs">
             <span className="material-symbols-outlined text-error">warning</span>
             Atenção aos Vencimentos
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
-            {alertInvoices.map((inv) => (
+            {activeAlertInvoices.map((inv) => (
               <div key={inv.id} className="bg-surface-container-low border border-outline-variant/30 rounded-lg p-sm space-y-xs hover:border-secondary transition-all">
                 <div className="flex justify-between items-center">
                   <span className="text-label-sm font-label-sm text-on-surface-variant font-bold truncate max-w-[120px]">
@@ -577,7 +582,7 @@ export default async function DashboardPage() {
                   className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
                   style={{ backgroundColor: `${tx.category.color}15`, color: tx.category.color }}
                 >
-                  <span className="material-symbols-outlined">receipt_long</span>
+                  <span className="material-symbols-outlined">payments</span>
                 </div>
                 <div className="min-w-0">
                   <p className="text-body-md font-medium text-on-surface truncate">{tx.description}</p>

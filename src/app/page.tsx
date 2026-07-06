@@ -6,10 +6,12 @@ import { createClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -18,12 +20,14 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     const err = params.get('error');
     if (err) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError(err);
     }
   }, []);
 
   const handleGoogleLogin = async () => {
     setError('');
+    setSuccessMessage('');
     setLoading(true);
     try {
       const supabase = createClient();
@@ -31,13 +35,16 @@ export default function LoginPage() {
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/api/auth/callback`,
+          queryParams: {
+            prompt: 'select_account',
+          },
         },
       });
       if (error) {
         setError(error.message);
         setLoading(false);
       }
-    } catch (err) {
+    } catch {
       setError('Erro ao iniciar o login com o Google.');
       setLoading(false);
     }
@@ -46,11 +53,32 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
 
-    // 1. Validação básica de e-mail (Login e Registro)
+    // 1. Validação básica de e-mail (Login, Registro e Recuperação)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
       setError('Por favor, insira um e-mail válido.');
+      return;
+    }
+
+    if (isForgotPassword) {
+      setLoading(true);
+      try {
+        const supabase = createClient();
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/api/auth/callback?next=/reset-password`,
+        });
+        if (error) {
+          setError(error.message);
+        } else {
+          setSuccessMessage('E-mail de recuperação enviado com sucesso! Verifique sua caixa de entrada.');
+        }
+      } catch {
+        setError('Erro ao enviar e-mail de recuperação.');
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
@@ -88,7 +116,7 @@ export default function LoginPage() {
         router.push('/dashboard');
         router.refresh();
       }
-    } catch (err) {
+    } catch {
       setError('Erro ao conectar com o servidor.');
       setLoading(false);
     }
@@ -102,21 +130,30 @@ export default function LoginPage() {
 
       {/* Main Container */}
       <div className="w-full max-w-md relative z-10 bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-8 space-y-6 shadow-[0_4px_30px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_30px_rgba(113,42,226,0.04)] transition-shadow">
-        
+
         {/* Header Logo */}
         <div className="flex flex-col items-center text-center space-y-2">
           <div className="w-12 h-12 rounded-full bg-secondary-fixed/50 border border-secondary-fixed-dim flex items-center justify-center text-secondary">
-            <span className="material-symbols-outlined text-[28px] font-bold">account_balance</span>
+            <span className="material-symbols-outlined text-[28px] font-bold">credit_card_heart</span>
           </div>
           <h1 className="text-3xl font-black text-primary tracking-tight">
             MinhaFatura
           </h1>
           <p className="text-label-sm font-label-sm text-on-surface-variant max-w-[280px]">
-            {isLogin 
-              ? 'Gerencie seus cartões, compras e faturas em um cofre digital seguro' 
-              : 'Cadastre-se para começar a controlar seus gastos de forma inteligente'}
+            {isForgotPassword
+              ? 'Insira seu e-mail para receber um link de redefinição de senha'
+              : isLogin
+                ? 'Seu melhor gestor de cartão, em um cofre digital seguro.'
+                : 'Cadastre-se para começar a controlar seus gastos de forma inteligente.'}
           </p>
         </div>
+
+        {/* Success Banner */}
+        {successMessage && (
+          <div className="bg-tertiary-container text-on-tertiary-container text-xs px-4 py-3 rounded-lg text-center font-medium border border-tertiary/10 animate-fade-in">
+            {successMessage}
+          </div>
+        )}
 
         {/* Error Banner */}
         {error && (
@@ -127,7 +164,7 @@ export default function LoginPage() {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
+          {!isLogin && !isForgotPassword && (
             <div className="space-y-1">
               <label className="text-label-sm font-label-sm text-on-surface-variant block">Nome</label>
               <div className="relative">
@@ -159,20 +196,37 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-label-sm font-label-sm text-on-surface-variant block">Senha</label>
-            <div className="relative">
-              <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant/75 text-xl">lock</span>
-              <input
-                type="password"
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-11 pr-4 py-2.5 bg-surface border border-outline-variant rounded-lg text-body-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all focus:ring-2 focus:ring-secondary/20 focus:border-secondary"
-              />
+          {!isForgotPassword && (
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <label className="text-label-sm font-label-sm text-on-surface-variant block">Senha</label>
+                {isLogin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsForgotPassword(true);
+                      setError('');
+                      setSuccessMessage('');
+                    }}
+                    className="text-[11px] text-secondary hover:underline cursor-pointer font-medium"
+                  >
+                    Esqueceu sua senha?
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant/75 text-xl">lock</span>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-11 pr-4 py-2.5 bg-surface border border-outline-variant rounded-lg text-body-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all focus:ring-2 focus:ring-secondary/20 focus:border-secondary"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <button
             type="submit"
@@ -183,49 +237,73 @@ export default function LoginPage() {
               <span className="material-symbols-outlined animate-spin">progress_activity</span>
             ) : (
               <>
-                <span>{isLogin ? 'Entrar na Conta' : 'Criar minha Conta'}</span>
+                <span>
+                  {isForgotPassword
+                    ? 'Enviar Link de Recuperação'
+                    : isLogin
+                      ? 'Entrar na Conta'
+                      : 'Criar minha Conta'}
+                </span>
                 <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
               </>
             )}
           </button>
         </form>
 
-        <div className="relative flex py-1 items-center">
-          <div className="flex-grow border-t border-outline-variant/30"></div>
-          <span className="flex-shrink mx-4 text-label-sm text-on-surface-variant/60 font-medium">ou</span>
-          <div className="flex-grow border-t border-outline-variant/30"></div>
-        </div>
+        {!isForgotPassword && (
+          <>
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-outline-variant/30"></div>
+              <span className="flex-shrink mx-4 text-label-sm text-on-surface-variant/60 font-medium">ou</span>
+              <div className="flex-grow border-t border-outline-variant/30"></div>
+            </div>
 
-        {/* Google Login Button */}
-        <button
-          type="button"
-          onClick={handleGoogleLogin}
-          disabled={loading}
-          className="w-full py-2.5 px-4 bg-surface border border-outline-variant hover:bg-surface-container-low active:scale-95 disabled:opacity-50 text-on-surface rounded-lg text-label-md font-label-md transition-all shadow-sm flex items-center justify-center gap-sm cursor-pointer"
-        >
-          <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 8.79-4.53z" fill="#EA4335"/>
-          </svg>
-          <span>Continuar com o Google</span>
-        </button>
+            {/* Google Login Button */}
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              className="w-full py-2.5 px-4 bg-surface border border-outline-variant hover:bg-surface-container-low active:scale-95 disabled:opacity-50 text-on-surface rounded-lg text-label-md font-label-md transition-all shadow-sm flex items-center justify-center gap-sm cursor-pointer"
+            >
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 8.79-4.53z" fill="#EA4335" />
+              </svg>
+              <span>Continuar com o Google</span>
+            </button>
+          </>
+        )}
 
         {/* Tab Toggle */}
         <div className="text-center pt-1">
-          <button
-            type="button"
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setError('');
-            }}
-            className="text-label-sm font-label-sm text-secondary hover:underline transition-colors cursor-pointer"
-          >
-            {isLogin 
-              ? 'Ainda não tem uma conta? Cadastre-se' 
-              : 'Já possui uma conta? Faça o Login'}
-          </button>
+          {isForgotPassword ? (
+            <button
+              type="button"
+              onClick={() => {
+                setIsForgotPassword(false);
+                setError('');
+                setSuccessMessage('');
+              }}
+              className="text-label-sm font-label-sm text-secondary hover:underline transition-colors cursor-pointer"
+            >
+              Voltar para o Login
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setError('');
+              }}
+              className="text-label-sm font-label-sm text-secondary hover:underline transition-colors cursor-pointer"
+            >
+              {isLogin
+                ? 'Ainda não tem uma conta? Cadastre-se'
+                : 'Já possui uma conta? Faça o Login'}
+            </button>
+          )}
         </div>
 
         {/* Security Info */}

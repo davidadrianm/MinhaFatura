@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CustomSelect, { SelectOption } from './CustomSelect';
+import { useDialog } from './DialogProvider';
 
 const bankOptions: SelectOption[] = [
   { value: 'Nubank', label: 'Nubank', icon: 'account_balance' },
@@ -121,10 +122,12 @@ interface CardsClientProps {
 }
 
 export default function CardsClient({ initialCards }: CardsClientProps) {
+  const { confirm, alert } = useDialog();
   const [cards, setCards] = useState<CardWithInvoices[]>(initialCards);
   const [editingCard, setEditingCard] = useState<CardWithInvoices | null>(null);
   const [name, setName] = useState('');
   const [bankName, setBankName] = useState('Nubank');
+  const [customBankName, setCustomBankName] = useState('');
   const [brand, setBrand] = useState('Mastercard');
   const [limit, setLimit] = useState('');
   const [limitFormatted, setLimitFormatted] = useState('');
@@ -165,7 +168,14 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
   const handleStartEdit = (card: CardWithInvoices) => {
     setEditingCard(card);
     setName(card.name);
-    setBankName(card.bankName);
+    const isPreset = bankOptions.some(opt => opt.value === card.bankName);
+    if (isPreset) {
+      setBankName(card.bankName);
+      setCustomBankName('');
+    } else {
+      setBankName('Outro');
+      setCustomBankName(card.bankName);
+    }
     setBrand(card.brand);
     setLimit(card.limit.toFixed(2));
     setLimitFormatted(card.limit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -181,6 +191,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
     setEditingCard(null);
     setName('');
     setBankName('Nubank');
+    setCustomBankName('');
     setBrand('Mastercard');
     setLimit('');
     setLimitFormatted('');
@@ -209,7 +220,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
-          bankName,
+          bankName: bankName === 'Outro' ? (customBankName.trim() || 'Outro') : bankName,
           brand,
           lastDigits: '0000',
           limit: shareLimit ? undefined : limit,
@@ -230,6 +241,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
         setLimitFormatted('');
         setShareLimit(false);
         setParentCardId('');
+        setCustomBankName('');
         // Recarregar os cartões da API
         const fetchRes = await fetch('/api/cards');
         const fetchData = await fetchRes.json();
@@ -265,7 +277,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
-          bankName,
+          bankName: bankName === 'Outro' ? (customBankName.trim() || 'Outro') : bankName,
           brand,
           limit: shareLimit ? undefined : limit,
           closingDay,
@@ -294,7 +306,11 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
   };
 
   const handleDeleteCard = async (cardId: string) => {
-    if (!confirm('Deseja arquivar este cartão? Ele será ocultado do sistema, mas seu histórico de faturas será preservado.')) {
+    const isConfirmed = await confirm('Deseja arquivar este cartão? Ele será ocultado do sistema, mas seu histórico de faturas será preservado.', {
+      type: 'warning',
+      title: 'Arquivar Cartão',
+    });
+    if (!isConfirmed) {
       return;
     }
 
@@ -310,10 +326,10 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
         }
         router.refresh();
       } else {
-        alert(data.error || 'Erro ao arquivar cartão.');
+        await alert(data.error || 'Erro ao arquivar cartão.', { type: 'error' });
       }
     } catch (err) {
-      alert('Erro de conexão.');
+      await alert('Erro de conexão.', { type: 'error' });
     }
   };
 
@@ -500,13 +516,14 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
           <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider text-center">Visualização do Cartão</p>
           
           {(() => {
-            const previewTheme = getCardStyle(bankName, brand, color);
+            const displayBank = bankName === 'Outro' ? (customBankName || 'Outro') : bankName;
+            const previewTheme = getCardStyle(displayBank, brand, color);
             return (
               <div className={`${previewTheme.textColorClass} rounded-[16px] p-md aspect-[1.58] flex flex-col justify-between relative overflow-hidden shadow-xl transition-all duration-500`} style={previewTheme.bgStyle}>
                 <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white to-transparent pointer-events-none"></div>
                 
                 <div className="flex justify-between items-start z-10">
-                  <span className="text-headline-md font-headline-md font-black tracking-tight">{bankName || 'Banco'}</span>
+                  <span className="text-headline-md font-headline-md font-black tracking-tight">{displayBank}</span>
                   <span className={`text-[10px] font-bold border px-2 py-0.5 rounded-full uppercase tracking-wider ${previewTheme.tagBg}`}>
                     {name || 'Apelido'}
                   </span>
@@ -569,6 +586,20 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
                 />
               </div>
             </div>
+
+            {bankName === 'Outro' && (
+              <div className="space-y-1 animate-fade-in">
+                <label className="text-label-sm font-label-sm text-on-surface-variant block">Nome do Banco</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Digite o nome do banco personalizado"
+                  value={customBankName}
+                  onChange={(e) => setCustomBankName(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-md text-on-surface placeholder-on-surface-variant/40 outline-none transition-all focus:ring-2 focus:ring-secondary/20 focus:border-secondary"
+                />
+              </div>
+            )}
 
             <div className="space-y-1">
               <label className="text-label-sm font-label-sm text-on-surface-variant block">Cor do Cartão</label>

@@ -1,17 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import CustomSelect, { SelectOption } from './CustomSelect';
 import MonthPicker from './MonthPicker';
 import { formatCalendarDate } from '@/lib/date-utils';
+import { useDialog } from './DialogProvider';
 
 const statusOptions: SelectOption[] = [
   { value: 'all', label: 'Todos os Status', icon: 'filter_list' },
   { value: 'open', label: 'Abertas', icon: 'lock_open' },
   { value: 'closed', label: 'Fechadas', icon: 'lock' },
   { value: 'paid', label: 'Pagas', icon: 'check_circle' },
-  { value: 'overdue', label: 'Atrasadas', icon: 'error' },
+  { value: 'overdue', label: 'Vencidas', icon: 'error' },
 ];
 
 interface Category {
@@ -125,11 +126,73 @@ const getMonthFilterOptions = (): SelectOption[] => {
   return options;
 };
 
-const matchMonthFilter = (filterVal: string, targetMonth: number, targetYear: number) => {
+const getInvoiceDisplayMonthYear = (dueDateStr: string) => {
+  const d = new Date(dueDateStr);
+  // Subtract 1 month to get the spending reference month
+  d.setUTCMonth(d.getUTCMonth() - 1);
+  return {
+    month: d.getUTCMonth() + 1,
+    year: d.getUTCFullYear()
+  };
+};
+
+const getInvoiceDisplayData = (
+  inv: { referenceMonth: number; referenceYear: number; closingDate: string; dueDate: string },
+  viewByReferenceMonth: boolean,
+  showPreviousMonthInvoice: boolean
+) => {
+  // 1. Obter o mês/ano base de referência das compras
+  let month = inv.referenceMonth;
+  let year = inv.referenceYear;
+
+  // Se 'Visualizar como mês de referência' estiver ativo, o mês base é o mês de vencimento
+  if (viewByReferenceMonth) {
+    const due = new Date(inv.dueDate);
+    month = due.getUTCMonth() + 1;
+    year = due.getUTCFullYear();
+  }
+
+  let closingDate = inv.closingDate;
+  let dueDate = inv.dueDate;
+
+  // 2. Se 'Mostrar fatura de mês anterior' estiver ativo, avançamos o mês de exibição e as datas em 1 mês
+  if (showPreviousMonthInvoice) {
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+
+    const cDate = new Date(inv.closingDate);
+    cDate.setUTCMonth(cDate.getUTCMonth() + 1);
+    closingDate = cDate.toISOString();
+
+    const dDate = new Date(inv.dueDate);
+    dDate.setUTCMonth(dDate.getUTCMonth() + 1);
+    dueDate = dDate.toISOString();
+  }
+
+  return {
+    month,
+    year,
+    closingDate,
+    dueDate
+  };
+};
+
+const matchMonthFilter = (
+  filterVal: string,
+  inv: Invoice,
+  viewByReferenceMonth: boolean,
+  showPreviousMonthInvoice: boolean
+) => {
   if (filterVal === 'all') return true;
-  
+
   const now = new Date();
-  
+  const display = getInvoiceDisplayData(inv, viewByReferenceMonth, showPreviousMonthInvoice);
+  const targetMonth = display.month;
+  const targetYear = display.year;
+
   if (filterVal === 'this-month') {
     return targetMonth === (now.getMonth() + 1) && targetYear === now.getFullYear();
   }
@@ -143,7 +206,7 @@ const matchMonthFilter = (filterVal: string, targetMonth: number, targetYear: nu
     d.setMonth(now.getMonth() + 1);
     return targetMonth === (d.getMonth() + 1) && targetYear === d.getFullYear();
   }
-  
+
   const [mStr, yStr] = filterVal.split('-');
   const m = parseInt(mStr);
   const y = parseInt(yStr);
@@ -202,26 +265,59 @@ const getBankBadge = (bankName: string, cardColor?: string) => {
 };
 
 export default function InvoicesClient({ initialInvoices, cards }: InvoicesClientProps) {
+  const { confirm, alert } = useDialog();
   const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
   const [filterCard, setFilterCard] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterMonth, setFilterMonth] = useState('this-month');
+  const [viewByReferenceMonth, setViewByReferenceMonth] = useState(false);
+  const [showPreviousMonthInvoice, setShowPreviousMonthInvoice] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('pref_view_by_reference_month');
+      const isRefView = stored === 'true';
+      setViewByReferenceMonth(isRefView);
+
+      const storedShowPrev = localStorage.getItem('pref_show_previous_month_invoice');
+      const isShowPrev = storedShowPrev === 'true';
+      setShowPreviousMonthInvoice(isShowPrev);
+      
+      // Ajusta as faturas inicialmente expandidas para o mês atual com base na preferência carregada
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
+      
+      const initialExpanded = new Set<string>();
+      initialInvoices.forEach(inv => {
+        const display = getInvoiceDisplayData(inv, isRefView, isShowPrev);
+        const targetMonth = display.month;
+        const targetYear = display.year;
+          
+        if (targetMonth === currentMonth && targetYear === currentYear) {
+          initialExpanded.add(inv.id);
+        }
+      });
+      setExpandedInvoiceIds(initialExpanded);
+    }
+  }, [initialInvoices]);
 
   // Export filtered invoices to CSV
   const handleExportCSV = () => {
     const headers = ['Mês Referência', 'Cartão', 'Fechamento', 'Vencimento', 'Total (R$)', 'Status'];
     
     const rows = filteredInvoices.map(inv => {
-      const refMonthStr = `${getMonthName(inv.referenceMonth)} de ${inv.referenceYear}`;
+      const display = getInvoiceDisplayData(inv, viewByReferenceMonth, showPreviousMonthInvoice);
+      const refMonthStr = `${getMonthName(display.month)} de ${display.year}`;
       const card = inv.card.name;
-      const closing = new Date(inv.closingDate).toLocaleDateString('pt-BR');
-      const due = new Date(inv.dueDate).toLocaleDateString('pt-BR');
+      const closing = new Date(display.closingDate).toLocaleDateString('pt-BR');
+      const due = new Date(display.dueDate).toLocaleDateString('pt-BR');
       const total = inv.totalAmount.toFixed(2).replace('.', ',');
       
       let statusText = 'Aberta';
-      if (inv.status === 'paid') statusText = 'Paga';
+      if (inv.status === 'paid') statusText = 'Pago';
       else if (inv.status === 'closed') statusText = 'Fechada';
-      else if (inv.status === 'overdue') statusText = 'Atrasada';
+      else if (inv.status === 'overdue') statusText = 'Vencida';
       
       return [
         refMonthStr,
@@ -259,20 +355,8 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
     }))
   ];
   
-  // Controle de faturas expandidas (inicia aberto para as faturas do mês atual)
-  const [expandedInvoiceIds, setExpandedInvoiceIds] = useState<Set<string>>(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1; // 1-indexed
-    const currentYear = now.getFullYear();
-    
-    const initialExpanded = new Set<string>();
-    initialInvoices.forEach(inv => {
-      if (inv.referenceMonth === currentMonth && inv.referenceYear === currentYear) {
-        initialExpanded.add(inv.id);
-      }
-    });
-    return initialExpanded;
-  });
+  // Controle de faturas expandidas (inicia vazio e é preenchido no useEffect após carregar preferências)
+  const [expandedInvoiceIds, setExpandedInvoiceIds] = useState<Set<string>>(new Set());
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   const router = useRouter();
@@ -308,17 +392,22 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
         }));
         router.refresh();
       } else {
-        alert(data.error || 'Erro ao pagar fatura.');
+        await alert(data.error || 'Erro ao pagar fatura.', { type: 'error' });
       }
     } catch (err) {
-      alert('Erro de conexão.');
+      await alert('Erro de conexão.', { type: 'error' });
     } finally {
       setLoadingId(null);
     }
   };
 
   const handleUnpayInvoice = async (invoiceId: string) => {
-    if (!confirm('Deseja estornar o pagamento desta fatura? Ela e suas parcelas voltarão a ficar pendentes.')) {
+    const isConfirmed = await confirm('Deseja estornar o pagamento desta fatura? Ela e suas parcelas voltarão a ficar pendentes.', {
+      type: 'warning',
+      title: 'Estornar Fatura',
+      confirmLabel: 'Estornar',
+    });
+    if (!isConfirmed) {
       return;
     }
     setLoadingId(invoiceId);
@@ -333,10 +422,10 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
           window.location.reload();
         }, 300);
       } else {
-        alert(data.error || 'Erro ao estornar fatura.');
+        await alert(data.error || 'Erro ao estornar fatura.', { type: 'error' });
       }
     } catch (err) {
-      alert('Erro de conexão.');
+      await alert('Erro de conexão.', { type: 'error' });
     } finally {
       setLoadingId(null);
     }
@@ -345,7 +434,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
   const filteredInvoices = invoices.filter((inv) => {
     const matchesCard = filterCard === 'all' || inv.card.id === filterCard;
     const matchesStatus = filterStatus === 'all' || inv.status === filterStatus;
-    const matchesMonth = matchMonthFilter(filterMonth, inv.referenceMonth, inv.referenceYear);
+    const matchesMonth = matchMonthFilter(filterMonth, inv, viewByReferenceMonth, showPreviousMonthInvoice);
     return matchesCard && matchesStatus && matchesMonth;
   });
 
@@ -354,7 +443,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
       case 'paid':
         return (
           <span className="bg-tertiary-fixed text-on-tertiary-container text-[10px] font-bold px-2.5 py-1 rounded-full uppercase select-none">
-            Paga
+            Pago
           </span>
         );
       case 'closed':
@@ -366,7 +455,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
       case 'overdue':
         return (
           <span className="bg-error-container text-on-error-container text-[10px] font-bold px-2.5 py-1 rounded-full uppercase select-none">
-            Atrasada
+            Vencida
           </span>
         );
       default: // "open"
@@ -468,6 +557,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
         {filteredInvoices.map((inv) => {
           const isExpanded = expandedInvoiceIds.has(inv.id);
           const isLoading = loadingId === inv.id;
+          const display = getInvoiceDisplayData(inv, viewByReferenceMonth, showPreviousMonthInvoice);
 
           return (
             <div 
@@ -480,18 +570,18 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
                   {getBankBadge(inv.card.bankName, inv.card.color || undefined)}
                   <div className="min-w-0">
                     <h3 className="text-body-md font-bold text-on-surface truncate flex items-center gap-xs">
-                      {getMonthName(inv.referenceMonth)} de {inv.referenceYear}
+                      {`${getMonthName(display.month)} de ${display.year}`}
                       <span className="text-[10px] bg-surface-container-high px-2 py-0.5 rounded text-on-surface-variant font-bold uppercase tracking-wider">{inv.card.name}</span>
                     </h3>
                     <div className="flex items-center gap-sm text-[10px] text-on-surface-variant mt-1 font-semibold">
                       <span className="flex items-center gap-[2px]">
                         <span className="material-symbols-outlined text-[14px]">calendar_today</span>
-                        Fechamento: {new Date(inv.closingDate).toLocaleDateString('pt-BR')}
+                        Fechamento: {new Date(display.closingDate).toLocaleDateString('pt-BR')}
                       </span>
                       <span>•</span>
                       <span className="flex items-center gap-[2px]">
                         <span className="material-symbols-outlined text-[14px]">event</span>
-                        Vencimento: {new Date(inv.dueDate).toLocaleDateString('pt-BR')}
+                        Vencimento: {new Date(display.dueDate).toLocaleDateString('pt-BR')}
                       </span>
                     </div>
                   </div>
@@ -536,7 +626,9 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
 
                     {/* Pay/Unpay Action */}
                     {isLoading ? (
-                      <span className="material-symbols-outlined animate-spin text-secondary text-[24px] w-24 flex justify-center">progress_activity</span>
+                      <div className="w-24 flex justify-center items-center">
+                        <span className="material-symbols-outlined animate-spin text-secondary text-[24px]">progress_activity</span>
+                      </div>
                     ) : inv.status === 'paid' ? (
                       <button
                         onClick={() => handleUnpayInvoice(inv.id)}
@@ -571,34 +663,36 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
                     <p className="text-xs text-on-surface-variant opacity-60 text-center py-2">Nenhuma compra parcelada ou à vista nesta fatura.</p>
                   ) : (
                     <div className="divide-y divide-outline-variant/15">
-                      {inv.installments.map((inst) => {
-                        const instDebtorsTotal = inst.splits ? inst.splits.reduce((sum, sp) => sum + sp.amount, 0) : 0;
-                        return (
-                          <div key={inst.id} className="py-2.5 flex justify-between items-center text-xs">
-                            <div className="flex items-center gap-sm min-w-0">
-                              <div 
-                                className="w-2 h-2 rounded-full shrink-0 shadow-inner" 
-                                style={{ backgroundColor: inst.transaction.category.color }}
-                              />
-                              <div className="min-w-0">
-                                <p className="font-bold text-on-surface truncate">{inst.transaction.description}</p>
-                                <p className="text-[9px] text-on-surface-variant mt-0.5">
-                                  Compra em: {formatCalendarDate(inst.transaction.purchaseDate)} • {inst.transaction.category.name}
+                      {[...inv.installments]
+                        .sort((a, b) => a.transaction.purchaseDate.localeCompare(b.transaction.purchaseDate))
+                        .map((inst) => {
+                          const instDebtorsTotal = inst.splits ? inst.splits.reduce((sum, sp) => sum + sp.amount, 0) : 0;
+                          return (
+                            <div key={inst.id} className="py-2.5 flex justify-between items-center text-xs">
+                              <div className="flex items-center gap-sm min-w-0">
+                                <div 
+                                  className="w-2 h-2 rounded-full shrink-0 shadow-inner" 
+                                  style={{ backgroundColor: inst.transaction.category.color }}
+                                />
+                                <div className="min-w-0">
+                                  <p className="font-bold text-on-surface truncate">{inst.transaction.description}</p>
+                                  <p className="text-[9px] text-on-surface-variant mt-0.5">
+                                    Compra em: {formatCalendarDate(inst.transaction.purchaseDate)} • {inst.transaction.category.name}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="font-bold text-on-surface">
+                                  R$ {inst.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </p>
+                                <p className="text-[9px] text-on-surface-variant font-medium">
+                                  Parcela {inst.installmentNumber}
+                                  {instDebtorsTotal > 0 && ` (Devedores: R$ ${instDebtorsTotal.toLocaleString('pt-BR')})`}
                                 </p>
                               </div>
                             </div>
-                            <div className="text-right shrink-0">
-                              <p className="font-bold text-on-surface">
-                                R$ {inst.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </p>
-                              <p className="text-[9px] text-on-surface-variant font-medium">
-                                Parcela {inst.installmentNumber}
-                                {instDebtorsTotal > 0 && ` (Devedores: R$ ${instDebtorsTotal.toLocaleString('pt-BR')})`}
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
                     </div>
                   )}
                 </div>

@@ -31,7 +31,10 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      user,
+      user: {
+        ...user,
+        avatarUrl: session.avatarUrl,
+      },
       stats: {
         cards: cardsCount,
         categories: categoriesCount,

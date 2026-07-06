@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useDialog } from './DialogProvider';
 
 const PRESET_COLORS = [
   '#10b981', // Emerald
@@ -30,6 +31,7 @@ interface CategoriesClientProps {
 }
 
 export default function CategoriesClient({ initialCategories }: CategoriesClientProps) {
+  const { confirm, alert } = useDialog();
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [name, setName] = useState('');
@@ -137,11 +139,15 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
 
   const handleDeleteCategory = async (catId: string, count: number) => {
     if (count > 0) {
-      alert(`Não é possível excluir esta categoria porque ela possui ${count} transação(ões) vinculada(s).`);
+      await alert(`Não é possível excluir esta categoria porque ela possui ${count} transação(ões) vinculada(s).`, { type: 'warning' });
       return;
     }
 
-    if (!confirm('Deseja excluir esta categoria?')) {
+    const isConfirmed = await confirm('Deseja excluir esta categoria?', {
+      type: 'warning',
+      title: 'Excluir Categoria',
+    });
+    if (!isConfirmed) {
       return;
     }
 
@@ -157,10 +163,10 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
         }
         router.refresh();
       } else {
-        alert(data.error || 'Erro ao deletar categoria.');
+        await alert(data.error || 'Erro ao deletar categoria.', { type: 'error' });
       }
     } catch (err) {
-      alert('Erro de conexão.');
+      await alert('Erro de conexão.', { type: 'error' });
     }
   };
 

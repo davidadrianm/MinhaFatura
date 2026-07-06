@@ -6,16 +6,17 @@ import { usePathname, useRouter } from 'next/navigation';
 interface SidebarProps {
   userName: string;
   userEmail: string;
+  userAvatar?: string | null;
 }
 
-export default function Sidebar({ userName, userEmail }: SidebarProps) {
+export default function Sidebar({ userName, userEmail, userAvatar }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
   const menuItems = [
     { name: 'Resumo', href: '/dashboard', icon: 'dashboard' },
     { name: 'Cartões', href: '/cards', icon: 'credit_card' },
-    { name: 'Transações', href: '/transactions', icon: 'receipt' },
+    { name: 'Transações', href: '/transactions', icon: 'payments' },
     { name: 'Faturas', href: '/invoices', icon: 'calendar_month' },
     { name: 'Categorias', href: '/categories', icon: 'category' },
     { name: 'Gastos Compartilhados', href: '/debtors', icon: 'group' },
@@ -37,11 +38,11 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
 
   const userInitials = userName
     ? userName
-        .split(' ')
-        .map((n) => n[0])
-        .slice(0, 2)
-        .join('')
-        .toUpperCase()
+      .split(' ')
+      .map((n) => n[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase()
     : 'US';
 
   return (
@@ -49,7 +50,7 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
       <div>
         {/* Brand/Logo Header */}
         <div className="flex items-center gap-sm mb-xl px-sm">
-          <span className="material-symbols-outlined text-headline-md text-primary font-bold">account_balance</span>
+          <span className="material-symbols-outlined text-headline-md text-primary font-bold">credit_card_heart</span>
           <div>
             <h1 className="text-headline-md font-headline-md font-bold text-primary tracking-tight">MinhaFatura</h1>
             <p className="text-label-sm font-label-sm text-on-surface-variant">Seu melhor gestor de cartão.</p>
@@ -64,11 +65,10 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-md py-sm rounded-lg transition-all active:scale-[0.98] ${
-                    active
-                      ? 'text-secondary font-bold border-l-4 border-secondary bg-secondary/10 pl-[8px] pr-sm'
-                      : 'text-on-surface-variant opacity-70 hover:bg-surface-container-high transition-colors px-sm'
-                  }`}
+                  className={`flex items-center gap-md py-sm rounded-lg transition-all active:scale-[0.98] ${active
+                    ? 'text-secondary font-bold border-l-4 border-secondary bg-secondary/10 pl-[8px] pr-sm'
+                    : 'text-on-surface-variant opacity-70 hover:bg-surface-container-high transition-colors px-sm'
+                    }`}
                 >
                   <span
                     className="material-symbols-outlined"
@@ -96,13 +96,23 @@ export default function Sidebar({ userName, userEmail }: SidebarProps) {
         </button>
 
         {/* Profile Details */}
-        <Link 
-          href="/profile" 
+        <Link
+          href="/profile"
           className="mt-md px-sm py-xs flex items-center gap-sm hover:bg-surface-container-high rounded-lg transition-colors cursor-pointer group border border-transparent hover:border-outline-variant/10"
           title="Ver perfil"
         >
-          <div className="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container border border-outline-variant/30 flex items-center justify-center font-bold text-sm select-none group-hover:ring-2 group-hover:ring-secondary/40 transition-all">
-            {userInitials}
+          <div className="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container border border-outline-variant/30 flex items-center justify-center font-bold text-sm select-none group-hover:ring-2 group-hover:ring-secondary/40 transition-all overflow-hidden">
+            {userAvatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={userAvatar}
+                alt={userName}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              userInitials
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-label-md font-label-md text-on-surface truncate group-hover:text-secondary transition-colors font-semibold">{userName || 'Usuário'}</p>

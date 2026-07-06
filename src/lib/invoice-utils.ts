@@ -8,6 +8,22 @@ interface InvoiceDetails {
 }
 
 /**
+ * Desloca uma data em um número de meses, mantendo o dia correspondente de forma segura
+ * (evitando overflow no dia do mês).
+ */
+export function shiftMonth(date: Date, months: number): Date {
+  const newDate = new Date(date.getTime());
+  const day = newDate.getUTCDate();
+  newDate.setUTCDate(1);
+  newDate.setUTCMonth(newDate.getUTCMonth() + months);
+  const year = newDate.getUTCFullYear();
+  const month = newDate.getUTCMonth();
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  newDate.setUTCDate(Math.min(day, lastDay));
+  return newDate;
+}
+
+/**
  * Calcula os detalhes da fatura para uma data de compra específica,
  * baseado no dia de fechamento e dia de vencimento do cartão.
  */
@@ -22,14 +38,14 @@ export function calculateInvoiceDate(
   const year = purchaseDate.getUTCFullYear();
   const month = purchaseDate.getUTCMonth(); // 0-indexed
 
-  // Closing date for the purchase month (UTC)
-  const closingThisMonth = new Date(Date.UTC(year, month, closingDay, 23, 59, 59, 999));
+  // Closing date for the purchase month (UTC) - set to midnight of the closing day
+  const closingThisMonth = new Date(Date.UTC(year, month, closingDay, 0, 0, 0, 0));
 
   let refMonth = month + 1; // 1-indexed (Jan = 1)
   let refYear = year;
 
-  // If the purchase date is after this month's closing, roll forward to next month
-  if (purchaseDate > closingThisMonth) {
+  // If the purchase date is on or after this month's closing, roll forward to next month
+  if (purchaseDate >= closingThisMonth) {
     refMonth += 1;
     if (refMonth > 12) {
       refMonth = 1;
@@ -54,9 +70,18 @@ export function calculateInvoiceDate(
 
   const dueDate = new Date(Date.UTC(dueYear, dueMonthIdx, dueDay, 23, 59, 59, 999));
 
+  // Shift reference month back by 1 month so that the "referenceMonth" matches the purchase month (compras)
+  // instead of the closing month.
+  let referenceMonth = refMonth - 1;
+  let referenceYear = refYear;
+  if (referenceMonth === 0) {
+    referenceMonth = 12;
+    referenceYear -= 1;
+  }
+
   return {
-    referenceMonth: refMonth,
-    referenceYear: refYear,
+    referenceMonth,
+    referenceYear,
     closingDate,
     dueDate,
   };
@@ -178,17 +203,21 @@ export async function createInstallmentsForTransaction(transactionId: string): P
 
   const invoiceIdsToRecalculate = new Set<string>();
 
-  for (let i = 1; i <= installmentsCount; i++) {
+  const loopStart = isFixed ? 1 : installmentStart;
+  const loopEnd = installmentsCount;
+
+  for (let i = loopStart; i <= loopEnd; i++) {
     // Calcula a data de compra da parcela com base no período de repetição
     const installmentPurchaseDate = new Date(purchaseDate);
+    const diff = isFixed ? (i - 1) : (i - installmentStart);
     if (recurrencePeriod === 'daily') {
-      installmentPurchaseDate.setUTCDate(purchaseDate.getUTCDate() + (i - 1));
+      installmentPurchaseDate.setUTCDate(purchaseDate.getUTCDate() + diff);
     } else if (recurrencePeriod === 'weekly') {
-      installmentPurchaseDate.setUTCDate(purchaseDate.getUTCDate() + (i - 1) * 7);
+      installmentPurchaseDate.setUTCDate(purchaseDate.getUTCDate() + diff * 7);
     } else if (recurrencePeriod === 'biweekly') {
-      installmentPurchaseDate.setUTCDate(purchaseDate.getUTCDate() + (i - 1) * 15);
+      installmentPurchaseDate.setUTCDate(purchaseDate.getUTCDate() + diff * 15);
     } else { // monthly
-      installmentPurchaseDate.setUTCMonth(purchaseDate.getUTCMonth() + (i - 1));
+      installmentPurchaseDate.setUTCMonth(purchaseDate.getUTCMonth() + diff);
     }
 
     // Determina os detalhes da fatura para esta parcela
@@ -223,7 +252,7 @@ export async function createInstallmentsForTransaction(transactionId: string): P
       installmentAmount = (installmentCents / 100) * sign;
     }
 
-    const currentInstallmentNumber = installmentStart + (i - 1);
+    const currentInstallmentNumber = i;
 
     // Cria a parcela no banco de dados
     const installment = await prisma.transactionInstallment.create({
@@ -276,7 +305,52 @@ const lastCheckedUsers = new Map<string, number>();
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
 
 /**
- * Garante que todas as transações recorrentes ativas tenham sempre um saldo de faturamento de 12 meses futuros,
+ * Calcula o limite utilizado real de um cartão ou de todos os cartões de um usuário,
+ * desconsiderando parcelas futuras de transações recorrentes fixas.
+ */
+export async function calculateUsedLimit(
+  userId: string,
+  cardId?: string
+): Promise<number> {
+  const now = new Date();
+  const currentMonth = now.getUTCMonth() + 1; // 1-indexed (Jan = 1)
+  const currentYear = now.getUTCFullYear();
+
+  // Busca todas as parcelas pendentes vinculadas a faturas não pagas
+  const installments = await prisma.transactionInstallment.findMany({
+    where: {
+      userId,
+      cardId: cardId ? cardId : undefined,
+      status: 'pending',
+      invoice: {
+        status: { in: ['open', 'closed', 'overdue'] }
+      }
+    },
+    include: {
+      transaction: {
+        select: {
+          recurrenceType: true
+        }
+      }
+    }
+  });
+
+  let totalUsed = 0;
+  for (const inst of installments) {
+    const isFutureFixed =
+      (inst.transaction.recurrenceType === 'fixed' || inst.transaction.recurrenceType === 'fixed_ended') &&
+      (inst.dueYear > currentYear || (inst.dueYear === currentYear && inst.dueMonth > currentMonth));
+
+    if (!isFutureFixed) {
+      totalUsed += inst.amount;
+    }
+  }
+
+  return totalUsed;
+}
+
+/**
+ * Garante que todas as transações recorrentes ativas tenham sempre um saldo de faturamento de 6 meses futuros,
  * criando uma nova parcela no final a cada mês que se passa.
  */
 export async function ensureRecurringTransactions(userId: string): Promise<void> {
@@ -314,7 +388,7 @@ export async function ensureRecurringTransactions(userId: string): Promise<void>
     },
   });
 
-  // 3. Garante um saldo de 12 meses para cada transação recorrente
+  // 3. Garante um saldo de 6 meses para cada transação recorrente
   for (const tx of transactions) {
     const sortedInstallments = [...tx.installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
     let maxInstallmentNumber = sortedInstallments.length > 0
@@ -330,34 +404,34 @@ export async function ensureRecurringTransactions(userId: string): Promise<void>
     const startMonth = startDetails.referenceMonth;
     const startYear = startDetails.referenceYear;
 
-    // Verifica cada mês na janela de 12 meses (do mês atual em diante)
-    for (let i = 0; i < 12; i++) {
+    // Verifica cada mês na janela de 6 meses (do mês atual em diante)
+    for (let i = 0; i < 6; i++) {
       const checkDate = new Date(Date.UTC(currentYear, currentMonth + i, 1));
       const checkMonth = checkDate.getUTCMonth() + 1; // 1-indexed (Jan = 1)
       const checkYear = checkDate.getUTCFullYear();
 
+      // Determina os detalhes de fatura para a parcela
+      // Usamos uma data simulada de compra baseada no dia de fechamento do cartão neste mês específico
+      const purchaseSimulatedDate = new Date(Date.UTC(checkYear, checkMonth - 1, tx.card.closingDay, 12, 0, 0));
+      const { referenceMonth, referenceYear, closingDate, dueDate } = calculateInvoiceDate(
+        purchaseSimulatedDate,
+        tx.card.closingDay,
+        tx.card.dueDay
+      );
+
       // Evita criar parcelas para meses anteriores ao início/compra da transação
-      if (checkYear < startYear || (checkYear === startYear && checkMonth < startMonth)) {
+      if (referenceYear < startYear || (referenceYear === startYear && referenceMonth < startMonth)) {
         continue;
       }
 
-      // Verifica se já existe parcela para este mês de vencimento
+      // Verifica se já existe parcela para este mês de referência
       const exists = tx.installments.some(
-        (inst) => inst.dueMonth === checkMonth && inst.dueYear === checkYear
+        (inst) => inst.dueMonth === referenceMonth && inst.dueYear === referenceYear
       );
 
       if (!exists) {
         // Incrementa a numeração da parcela
         maxInstallmentNumber += 1;
-
-        // Determina os detalhes de fatura para a parcela
-        // Usamos uma data simulada de compra baseada no dia de fechamento do cartão neste mês específico
-        const purchaseSimulatedDate = new Date(Date.UTC(checkYear, checkMonth - 1, tx.card.closingDay, 12, 0, 0));
-        const { referenceMonth, referenceYear, closingDate, dueDate } = calculateInvoiceDate(
-          purchaseSimulatedDate,
-          tx.card.closingDay,
-          tx.card.dueDay
-        );
 
         // Obtém ou cria a fatura para o mês correspondente
         const invoice = await getOrCreateInvoice(
@@ -378,8 +452,8 @@ export async function ensureRecurringTransactions(userId: string): Promise<void>
             invoiceId: invoice.id,
             installmentNumber: maxInstallmentNumber,
             amount: tx.amountTotal,
-            dueMonth: checkMonth,
-            dueYear: checkYear,
+            dueMonth: referenceMonth,
+            dueYear: referenceYear,
             status: invoice.status === 'paid' ? 'paid' : 'pending',
           },
         });
@@ -401,4 +475,30 @@ export async function ensureRecurringTransactions(userId: string): Promise<void>
       }
     }
   }
+}
+
+/**
+ * Calcula dinamicamente o status de uma fatura com base nas datas e status de pagamento.
+ */
+export function getInvoiceStatus(invoice: {
+  status: string;
+  closingDate: Date | string;
+  dueDate: Date | string;
+  paidAt?: Date | string | null;
+}): 'paid' | 'overdue' | 'closed' | 'open' {
+  if (invoice.status === 'paid' || invoice.paidAt) {
+    return 'paid';
+  }
+  
+  const now = new Date();
+  const closing = new Date(invoice.closingDate);
+  const due = new Date(invoice.dueDate);
+
+  if (now > due) {
+    return 'overdue';
+  }
+  if (now > closing) {
+    return 'closed';
+  }
+  return 'open';
 }

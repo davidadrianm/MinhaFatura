@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useDialog } from './DialogProvider';
 import CustomSelect, { SelectOption } from './CustomSelect';
 import MonthPicker from './MonthPicker';
 import DatePicker from './DatePicker';
@@ -144,6 +145,35 @@ interface Transaction {
   installments: Installment[];
 }
 
+const getInstallmentPurchaseDate = (tx: Transaction, inst: Installment) => {
+  const isFixed = tx.recurrenceType === 'fixed' || tx.recurrenceType === 'fixed_ended';
+  if (isFixed) {
+    return {
+      month: inst.dueMonth,
+      year: inst.dueYear
+    };
+  }
+
+  const i = inst.installmentNumber - (tx.installmentStart || 1) + 1;
+  const [year, month, day] = tx.purchaseDate.split('-').map(Number);
+  const instDate = new Date(Date.UTC(year, month - 1, day));
+  
+  if (tx.recurrencePeriod === 'daily') {
+    instDate.setUTCDate(instDate.getUTCDate() + (i - 1));
+  } else if (tx.recurrencePeriod === 'weekly') {
+    instDate.setUTCDate(instDate.getUTCDate() + (i - 1) * 7);
+  } else if (tx.recurrencePeriod === 'biweekly') {
+    instDate.setUTCDate(instDate.getUTCDate() + (i - 1) * 15);
+  } else { // monthly
+    instDate.setUTCMonth(instDate.getUTCMonth() + (i - 1));
+  }
+
+  return {
+    month: instDate.getUTCMonth() + 1,
+    year: instDate.getUTCFullYear()
+  };
+};
+
 interface TransactionsClientProps {
   initialTransactions: Transaction[];
   cards: CardOption[];
@@ -157,6 +187,7 @@ export default function TransactionsClient({
   categories,
   debtors,
 }: TransactionsClientProps) {
+  const { confirm, alert } = useDialog();
   const filterCardOptions: SelectOption[] = [
     { value: 'all', label: 'Todos os cartões', icon: 'credit_card' },
     ...cards.map(c => ({ value: c.id, label: c.name, icon: 'credit_card' }))
@@ -288,7 +319,7 @@ export default function TransactionsClient({
     const headers = ['Data', 'Descrição', 'Categoria', 'Cartão', 'Tipo', 'Valor (R$)', 'Status', 'Compartilhado'];
     
     const rows = filteredTransactions.map(tx => {
-      const dateStr = formatCalendarDate(tx.purchaseDate);
+      let dateStr = formatCalendarDate(tx.purchaseDate);
       const desc = tx.description;
       const cat = tx.category.name;
       const card = tx.card.name;
@@ -306,11 +337,29 @@ export default function TransactionsClient({
       let statusText = 'Pendente';
       if (filter) {
         const inst = tx.installments?.find(
-          i => i.dueMonth === filter.month && i.dueYear === filter.year
+          i => {
+            const instPurchase = getInstallmentPurchaseDate(tx, i);
+            return instPurchase.month === filter.month && instPurchase.year === filter.year;
+          }
         );
         if (inst) {
           amountVal = inst.amount;
           statusText = inst.status === 'paid' ? 'Pago' : 'Pendente';
+          if (tx.recurrenceType && tx.recurrenceType !== 'none') {
+            const iIdx = inst.installmentNumber - (tx.installmentStart || 1) + 1;
+            const [year, month, day] = tx.purchaseDate.split('-').map(Number);
+            const instDate = new Date(Date.UTC(year, month - 1, day));
+            if (tx.recurrencePeriod === 'daily') {
+              instDate.setUTCDate(instDate.getUTCDate() + (iIdx - 1));
+            } else if (tx.recurrencePeriod === 'weekly') {
+              instDate.setUTCDate(instDate.getUTCDate() + (iIdx - 1) * 7);
+            } else if (tx.recurrencePeriod === 'biweekly') {
+              instDate.setUTCDate(instDate.getUTCDate() + (iIdx - 1) * 15);
+            } else { // monthly
+              instDate.setUTCMonth(instDate.getUTCMonth() + (iIdx - 1));
+            }
+            dateStr = formatCalendarDate(instDate.toISOString().split('T')[0]);
+          }
         }
       } else {
         const allPaid = tx.installments && tx.installments.length > 0 && tx.installments.every(i => i.status === 'paid');
@@ -495,7 +544,7 @@ export default function TransactionsClient({
           description,
           purchaseDate,
           amountTotal,
-          installmentsCount: recurrenceType === 'none' ? '1' : (recurrenceType === 'fixed' ? '12' : installmentsCount),
+          installmentsCount: recurrenceType === 'none' ? '1' : (recurrenceType === 'fixed' ? '6' : installmentsCount),
           cardId,
           categoryId,
           notes,
@@ -503,6 +552,8 @@ export default function TransactionsClient({
           recurrencePeriod: recurrenceType === 'installments' ? recurrencePeriod : 'monthly',
           installmentStart: recurrenceType === 'installments' ? installmentStart : '1',
           splits: isSplit ? formSplits.map(s => ({ debtorId: s.debtorId, amount: s.amount })) : [],
+          selectedMonth: getFilterMonthYear(filterMonth)?.month,
+          selectedYear: getFilterMonthYear(filterMonth)?.year,
         }),
       });
 
@@ -578,6 +629,7 @@ export default function TransactionsClient({
     );
     
     let displayDate = tx.purchaseDate;
+    let initialInstallmentStart = tx.installmentStart || 1;
     if (filter && tx.recurrenceType && tx.recurrenceType !== 'none') {
       const inst = tx.installments?.find(
         i => i.dueMonth === filter.month && i.dueYear === filter.year
@@ -597,6 +649,7 @@ export default function TransactionsClient({
           instDate.setUTCMonth(instDate.getUTCMonth() + (i - 1));
         }
         displayDate = instDate.toISOString().split('T')[0];
+        initialInstallmentStart = inst.installmentNumber;
       }
     }
     setPurchaseDate(displayDate);
@@ -620,12 +673,15 @@ export default function TransactionsClient({
     // Recurrence fields (disabled but set for display)
     setRecurrenceType(tx.recurrenceType || 'none');
     setRecurrencePeriod(tx.recurrencePeriod || 'monthly');
-    setInstallmentStart((tx.installmentStart || 1).toString());
+    
+    setInstallmentStart(initialInstallmentStart.toString());
     setInstallmentsCount((tx.installmentsCount || 1).toString());
     
     // Open modal
     setIsOpen(true);
   };
+
+
 
   const handleNewTransactionClick = () => {
     setTxToEdit(null);
@@ -756,7 +812,7 @@ export default function TransactionsClient({
     }
   };
 
-  const handleDeleteClick = (tx: Transaction) => {
+  const handleDeleteClick = async (tx: Transaction) => {
     if (tx.recurrenceType === 'fixed' || tx.recurrenceType === 'fixed_ended') {
       const filter = getFilterMonthYear(filterMonth);
       if (filter) {
@@ -766,8 +822,13 @@ export default function TransactionsClient({
       }
     }
 
-    if (confirm('Deseja excluir esta compra? Todas as parcelas associadas serão apagadas e os valores das faturas recalculados.')) {
-      handleDeleteTransaction(tx.id, 'all');
+    const isConfirmed = await confirm('Deseja excluir esta compra? Todas as parcelas associadas serão apagadas e os valores das faturas recalculados.', {
+      type: 'error',
+      title: 'Excluir Compra',
+      confirmLabel: 'Excluir',
+    });
+    if (isConfirmed) {
+      await handleDeleteTransaction(tx.id, 'all');
     }
   };
 
@@ -803,10 +864,10 @@ export default function TransactionsClient({
             .catch(err => console.error("Erro ao recarregar transações pós-deleção:", err));
         }
       } else {
-        alert(data.error || 'Erro ao deletar transação.');
+        await alert(data.error || 'Erro ao deletar transação.', { type: 'error' });
       }
     } catch (err) {
-      alert('Erro de conexão.');
+      await alert('Erro de conexão.', { type: 'error' });
     }
   };
 
@@ -826,18 +887,24 @@ export default function TransactionsClient({
     const matchesCard = filterCard === 'all' || tx.card.id === filterCard;
     const matchesCategory = filterCategory === 'all' || tx.category.id === filterCategory;
     
-    // Month Filter Logic based on installments (recurring transactions repeat every month)
+    // Month Filter Logic based on calendar/purchase date (ignoring invoice boundaries)
     const filter = getFilterMonthYear(filterMonth);
     const matchesMonth = !filter || (tx.installments && tx.installments.some(
-      (inst) => inst.dueMonth === filter.month && inst.dueYear === filter.year
+      (inst) => {
+        const instPurchase = getInstallmentPurchaseDate(tx, inst);
+        return instPurchase.month === filter.month && instPurchase.year === filter.year;
+      }
     ));
 
     const matchesStatus = (() => {
       if (filterStatus === 'all') return true;
       if (filter) {
-        // Find installment for the filtered month
+        // Find installment for the filtered month based on actual purchase date
         const inst = tx.installments?.find(
-          (i) => i.dueMonth === filter.month && i.dueYear === filter.year
+          (i) => {
+            const instPurchase = getInstallmentPurchaseDate(tx, i);
+            return instPurchase.month === filter.month && instPurchase.year === filter.year;
+          }
         );
         if (!inst) return false;
         return filterStatus === 'paid' ? inst.status === 'paid' : inst.status !== 'paid';
@@ -882,7 +949,10 @@ export default function TransactionsClient({
       
       let text = '';
       const currentInst = tx.installments?.find(
-        (inst) => inst.dueMonth === targetMonth && inst.dueYear === targetYear
+        (inst) => {
+          const instPurchase = getInstallmentPurchaseDate(tx, inst);
+          return instPurchase.month === targetMonth && instPurchase.year === targetYear;
+        }
       );
       if (currentInst) {
         text = `${currentInst.installmentNumber}/${tx.installmentsCount}`;
@@ -1042,7 +1112,33 @@ export default function TransactionsClient({
                   <React.Fragment key={tx.id}>
                     <tr className="hover:bg-surface-container-low/40 transition-colors">
                       <td className="py-md px-md whitespace-nowrap text-on-surface-variant font-medium">
-                        {formatCalendarDate(tx.purchaseDate)}
+                        {(() => {
+                          const filter = getFilterMonthYear(filterMonth);
+                          if (filter && tx.recurrenceType && tx.recurrenceType !== 'none') {
+                            const inst = tx.installments?.find(
+                              i => {
+                                const instPurchase = getInstallmentPurchaseDate(tx, i);
+                                return instPurchase.month === filter.month && instPurchase.year === filter.year;
+                              }
+                            );
+                            if (inst) {
+                              const iIdx = inst.installmentNumber - (tx.installmentStart || 1) + 1;
+                              const [year, month, day] = tx.purchaseDate.split('-').map(Number);
+                              const instDate = new Date(Date.UTC(year, month - 1, day));
+                              if (tx.recurrencePeriod === 'daily') {
+                                instDate.setUTCDate(instDate.getUTCDate() + (iIdx - 1));
+                              } else if (tx.recurrencePeriod === 'weekly') {
+                                instDate.setUTCDate(instDate.getUTCDate() + (iIdx - 1) * 7);
+                              } else if (tx.recurrencePeriod === 'biweekly') {
+                                instDate.setUTCDate(instDate.getUTCDate() + (iIdx - 1) * 15);
+                              } else { // monthly
+                                instDate.setUTCMonth(instDate.getUTCMonth() + (iIdx - 1));
+                              }
+                              return formatCalendarDate(instDate.toISOString().split('T')[0]);
+                            }
+                          }
+                          return formatCalendarDate(tx.purchaseDate);
+                        })()}
                       </td>
                       <td className="py-md px-md font-bold text-on-surface">
                         <div className="flex flex-col">
@@ -1081,7 +1177,10 @@ export default function TransactionsClient({
                           const filter = getFilterMonthYear(filterMonth);
                           if (filter) {
                             const inst = tx.installments?.find(
-                              i => i.dueMonth === filter.month && i.dueYear === filter.year
+                              i => {
+                                const instPurchase = getInstallmentPurchaseDate(tx, i);
+                                return instPurchase.month === filter.month && instPurchase.year === filter.year;
+                              }
                             );
                             if (inst) return inst.amount;
                           }
@@ -1089,16 +1188,41 @@ export default function TransactionsClient({
                         })().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-md px-sm text-center whitespace-nowrap">
-                        <span className="material-symbols-outlined text-[20px] text-tertiary-container opacity-85">
-                          check_circle
-                        </span>
+                        {(() => {
+                          const filter = getFilterMonthYear(filterMonth);
+                          let isPaid = false;
+                          if (filter) {
+                            const inst = tx.installments?.find(
+                              i => {
+                                const instPurchase = getInstallmentPurchaseDate(tx, i);
+                                return instPurchase.month === filter.month && instPurchase.year === filter.year;
+                              }
+                            );
+                            isPaid = inst?.status === 'paid';
+                          } else {
+                            isPaid = tx.installments && tx.installments.length > 0 && tx.installments.every(i => i.status === 'paid');
+                          }
+                          return (
+                            <span 
+                              className={`material-symbols-outlined text-[20px] ${
+                                isPaid ? 'text-tertiary-container opacity-85' : 'text-on-surface-variant opacity-30'
+                              }`}
+                              title={isPaid ? 'Pago' : 'Pendente'}
+                            >
+                              {isPaid ? 'check_circle' : 'hourglass_empty'}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="py-md px-md text-right whitespace-nowrap">
                         {(() => {
                           const filter = getFilterMonthYear(filterMonth);
                           if (filter) {
                             const inst = tx.installments?.find(
-                              i => i.dueMonth === filter.month && i.dueYear === filter.year
+                              i => {
+                                const instPurchase = getInstallmentPurchaseDate(tx, i);
+                                return instPurchase.month === filter.month && instPurchase.year === filter.year;
+                              }
                             );
                             if (inst && inst.splits && inst.splits.length > 0) {
                               const instSplitsSum = inst.splits.reduce((sum, s) => sum + s.amount, 0);
@@ -1178,7 +1302,8 @@ export default function TransactionsClient({
                                 .filter((inst) => {
                                   const filter = getFilterMonthYear(filterMonth);
                                   if (!filter) return true;
-                                  return inst.dueMonth === filter.month && inst.dueYear === filter.year;
+                                  const instPurchase = getInstallmentPurchaseDate(tx, inst);
+                                  return instPurchase.month === filter.month && instPurchase.year === filter.year;
                                 })
                                 .sort((a, b) => a.installmentNumber - b.installmentNumber)
                                 .map((inst) => (
@@ -1374,7 +1499,7 @@ export default function TransactionsClient({
 
                       {/* Parcela Inicial */}
                       <div>
-                        <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">Parcela Inicial</label>
+                        <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">Parcela Atual</label>
                         <input
                           type="number"
                           min="1"

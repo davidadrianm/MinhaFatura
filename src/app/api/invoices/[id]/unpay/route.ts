@@ -22,9 +22,14 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Fatura não encontrada' }, { status: 404 });
     }
 
-    // Determina o status correto (se já passou do fechamento, fica "closed", senão "open")
+    // Determina o status correto com base na data atual
     const now = new Date();
-    const correctStatus = new Date(invoice.closingDate) < now ? 'closed' : 'open';
+    let correctStatus = 'open';
+    if (new Date(invoice.dueDate) < now) {
+      correctStatus = 'overdue';
+    } else if (new Date(invoice.closingDate) < now) {
+      correctStatus = 'closed';
+    }
 
     // Atualiza a fatura
     await prisma.invoice.update({

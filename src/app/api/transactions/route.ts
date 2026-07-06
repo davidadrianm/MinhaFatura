@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { createInstallmentsForTransaction, ensureRecurringTransactions } from '@/lib/invoice-utils';
+import { createInstallmentsForTransaction, ensureRecurringTransactions, calculateInvoiceDate, shiftMonth } from '@/lib/invoice-utils';
 
 export async function GET(request: Request) {
   try {
@@ -71,7 +71,9 @@ export async function POST(request: Request) {
       splits,
       recurrenceType = 'none',
       recurrencePeriod = 'monthly',
-      installmentStart = 1
+      installmentStart = 1,
+      selectedMonth,
+      selectedYear,
     } = await request.json();
 
     if (!description || !purchaseDate || !amountTotal || !installmentsCount || !cardId || !categoryId) {
@@ -88,6 +90,9 @@ export async function POST(request: Request) {
       }
     }
 
+    let basePurchaseDate = new Date(`${purchaseDate}T12:00:00.000Z`);
+    let finalInstallmentStart = parseInt(installmentStart.toString());
+
     // Cria a transação com splits (se houver)
     const transaction = await prisma.transaction.create({
       data: {
@@ -95,17 +100,13 @@ export async function POST(request: Request) {
         cardId,
         categoryId,
         description,
-        // Parse the date string as noon UTC to avoid timezone-induced date rollback.
-        // e.g. "2026-06-04" at midnight UTC = 2026-06-03 20:00 local (UTC-4) → wrong month.
-        // Using noon UTC guarantees no timezone can shift it to the previous calendar day.
-        purchaseDate: new Date(`${purchaseDate}T12:00:00.000Z`),
-
+        purchaseDate: basePurchaseDate,
         amountTotal: totalAmount,
         installmentsCount: parseInt(installmentsCount),
         notes,
         recurrenceType,
         recurrencePeriod,
-        installmentStart: parseInt(installmentStart.toString()),
+        installmentStart: finalInstallmentStart,
         splits: splits && splits.length > 0 ? {
           create: splits.map((s: any) => ({
             debtorId: s.debtorId,

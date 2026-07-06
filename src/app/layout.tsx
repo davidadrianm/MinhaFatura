@@ -9,8 +9,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Controle de Cartão de Crédito - MinhaFatura",
-  description: "Gerenciamento inteligente e premium de cartões, faturas, compras e parcelas.",
+  title: "MinhaFatura - Seu melhor gestor de cartão.",
+  description: "Gerenciamento inteligente de cartão de crédito.",
 };
 
 import { cookies } from "next/headers";
@@ -32,7 +32,8 @@ export default async function RootLayout({
     >
       <head>
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
-        <script dangerouslySetInnerHTML={{ __html: `
+        <script dangerouslySetInnerHTML={{
+          __html: `
           try {
             const theme = document.cookie.split('; ').find(row => row.startsWith('theme='))?.split('=')[1] || 'system';
             if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {

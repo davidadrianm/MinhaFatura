@@ -9,6 +9,7 @@ interface UserPayload {
   userId: string;
   email: string;
   name: string;
+  avatarUrl?: string | null;
 }
 
 export function hashPassword(password: string): string {
@@ -69,6 +70,7 @@ export async function getAuthenticatedUser(
       userId: user.id,
       email: user.email || '',
       name: user.user_metadata?.full_name || user.user_metadata?.name || 'Usuário',
+      avatarUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
     };
   } catch (error) {
     return null;
@@ -88,6 +90,7 @@ export const getSessionUser = cache(async () => {
       userId: user.id,
       email: user.email || '',
       name: user.user_metadata?.full_name || user.user_metadata?.name || 'Usuário',
+      avatarUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
     };
   } catch (error) {
     return null;

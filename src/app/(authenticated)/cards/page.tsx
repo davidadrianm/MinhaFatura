@@ -2,6 +2,7 @@ import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import CardsClient from '@/components/CardsClient';
 import { redirect } from 'next/navigation';
+import { calculateUsedLimit } from '@/lib/invoice-utils';
 
 export const revalidate = 0; // Evita cache em desenvolvimento
 
@@ -11,21 +12,24 @@ export default async function CardsPage() {
     redirect('/');
   }
 
-  // Busca os cartões do usuário com faturas não pagas para calcular o limite utilizado
+  // Busca os cartões ativos do usuário
   const cards = await prisma.creditCard.findMany({
     where: { userId: user.userId, isActive: true },
-    include: {
-      invoices: {
-        where: {
-          status: { in: ['open', 'closed', 'overdue'] }
-        },
-        select: {
-          totalAmount: true
-        }
-      }
-    },
     orderBy: { createdAt: 'desc' }
   });
 
-  return <CardsClient initialCards={cards} />;
+  // Calcula o limite utilizado real de cada cartão individualmente
+  const cardsWithAdjustedInvoices = await Promise.all(
+    cards.map(async (card) => {
+      const usedLimit = await calculateUsedLimit(user.userId, card.id);
+      return {
+        ...card,
+        invoices: [
+          { totalAmount: usedLimit }
+        ]
+      };
+    })
+  );
+
+  return <CardsClient initialCards={cardsWithAdjustedInvoices} />;
 }

@@ -55,6 +55,18 @@ export async function POST(request: Request) {
       );
     }
 
+    if (data.user) {
+      const { prisma } = await import('@/lib/prisma');
+      await prisma.user.create({
+        data: {
+          id: data.user.id,
+          email: email.trim().toLowerCase(),
+          name: name.trim(),
+          password: '', // dummy password since auth is handled by Supabase
+        }
+      });
+    }
+
     return NextResponse.json({
       success: true,
       user: {

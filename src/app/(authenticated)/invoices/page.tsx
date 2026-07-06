@@ -2,6 +2,7 @@ import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import InvoicesClient from '@/components/InvoicesClient';
 import { redirect } from 'next/navigation';
+import { getInvoiceStatus } from '@/lib/invoice-utils';
 
 export const revalidate = 0; // Evita cache em desenvolvimento
 
@@ -77,9 +78,10 @@ export default async function InvoicesPage() {
     })
   ]);
 
-  // Mapeia datas para strings ISO limpas para passar para o cliente
+  // Mapeia datas para strings ISO limpas para passar para o cliente e calcula status dinamicamente
   const mappedInvoices = invoices.map((inv) => ({
     ...inv,
+    status: getInvoiceStatus(inv),
     closingDate: inv.closingDate.toISOString(),
     dueDate: inv.dueDate.toISOString(),
     paidAt: inv.paidAt ? inv.paidAt.toISOString() : null,
