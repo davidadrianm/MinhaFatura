@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { formatCalendarDate } from '@/lib/date-utils';
 import { calculateUsedLimit, getInvoiceStatus } from '@/lib/invoice-utils';
+import { Suspense } from 'react';
+import DashboardSkeleton from '@/components/skeletons/DashboardSkeleton';
 
 export const revalidate = 0; // Evita cache em desenvolvimento
 
@@ -54,9 +56,26 @@ export default async function DashboardPage() {
   const user = await getSessionUser();
   if (!user) return null;
 
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <DashboardDataWrapper userId={user.userId} />
+    </Suspense>
+  );
+}
+
+async function DashboardDataWrapper({ userId }: { userId: string }) {
+  const user = { userId };
+
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
+
+  let targetRefMonth = currentMonth - 1;
+  let targetRefYear = currentYear;
+  if (targetRefMonth === 0) {
+    targetRefMonth = 12;
+    targetRefYear -= 1;
+  }
 
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
@@ -91,8 +110,8 @@ export default async function DashboardPage() {
     prisma.invoice.findMany({
       where: {
         userId: user.userId,
-        referenceMonth: currentMonth,
-        referenceYear: currentYear
+        referenceMonth: targetRefMonth,
+        referenceYear: targetRefYear
       },
       include: {
         card: true,
@@ -137,14 +156,23 @@ export default async function DashboardPage() {
       where: {
         userId: user.userId,
         status: { in: ['open', 'closed', 'overdue'] },
+        OR: [
+          { referenceYear: { gt: currentYear } },
+          { referenceYear: currentYear, referenceMonth: { gte: currentMonth } }
+        ]
       },
       include: {
-        card: true
+        card: true,
+        installments: {
+          include: {
+            splits: true
+          }
+        }
       },
       orderBy: {
         dueDate: 'asc'
       },
-      take: 3
+      take: 6
     }),
     prisma.transaction.findMany({
       where: {
@@ -186,6 +214,17 @@ export default async function DashboardPage() {
 
   const currentMonthTitularSpent = currentMonthSpent - currentMonthDebtorsAmount;
 
+  // Summing the listed upcoming invoices
+  const totalUpcomingSpent = activeAlertInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+  const totalUpcomingDebtors = activeAlertInvoices.reduce((sum, inv) => {
+    const invoiceDebtorsSum = inv.installments.reduce((instSum, inst) => {
+      const splitSum = inst.splits ? inst.splits.reduce((sSum, split) => sSum + split.amount, 0) : 0;
+      return instSum + splitSum;
+    }, 0);
+    return sum + invoiceDebtorsSum;
+  }, 0);
+  const totalUpcomingTitular = totalUpcomingSpent - totalUpcomingDebtors;
+
   const categoryMap: { [key: string]: { name: string; color: string; amount: number } } = {};
   installmentsThisMonth.forEach((inst) => {
     const cat = inst.transaction.category;
@@ -202,6 +241,47 @@ export default async function DashboardPage() {
   const categoryList = Object.values(categoryMap).sort((a, b) => b.amount - a.amount);
 
   const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+  const getInvoiceDisplayDateDetails = (card: any, invoice: any, targetMonth: number, targetYear: number) => {
+    if (invoice) {
+      return {
+        closingDateStr: new Date(invoice.closingDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+        dueDateStr: new Date(invoice.dueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+        refMonthStr: monthNames[invoice.referenceMonth - 1]
+      };
+    }
+    // Estimate
+    let dueMonthIdx = targetMonth; // Se dueDay > closingDay, o vencimento é no mês seguinte (targetMonth)
+    if (card.dueDay <= card.closingDay) {
+      dueMonthIdx += 1; // Se dueDay <= closingDay, o vencimento é dois meses após (targetMonth + 1)
+    }
+    
+    let dueYear = targetYear;
+    if (dueMonthIdx > 11) {
+      dueYear += Math.floor(dueMonthIdx / 12);
+      dueMonthIdx = dueMonthIdx % 12;
+    }
+
+    // Estimar fechamento
+    let closingMonthIdx = dueMonthIdx;
+    let closingYear = dueYear;
+    if (card.dueDay <= card.closingDay) {
+      closingMonthIdx -= 1;
+      if (closingMonthIdx < 0) {
+        closingMonthIdx = 11;
+        closingYear -= 1;
+      }
+    }
+    
+    const estimatedDue = new Date(dueYear, dueMonthIdx, card.dueDay);
+    const estimatedClosing = new Date(closingYear, closingMonthIdx, card.closingDay);
+    return {
+      closingDateStr: estimatedClosing.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      dueDateStr: estimatedDue.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      refMonthStr: monthNames[targetMonth - 1]
+    };
+  };
+
   const last6MonthsData: { label: string; amount: number }[] = [];
 
   for (let i = 5; i >= 0; i--) {
@@ -254,160 +334,153 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-lg">
-      {/* Financial Summary Bento Grid & Card Invoices Block */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
+      {/* Cards de Resumo */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-lg">
         
-        {/* Left Column: 2x2 Grid of Summary Cards */}
-        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-md">
-          
-          {/* Card 1: Fatura Atual */}
-          <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between h-[136px] hover:-translate-y-0.5 transition-transform duration-300">
-            <div className="flex justify-between items-start">
-              <span className="text-label-md font-label-md text-on-surface-variant">Fatura Atual (Total)</span>
-              <span className="material-symbols-outlined text-secondary opacity-70">credit_card</span>
+        {/* Card 1: Limite Disponível */}
+        <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between h-[136px] hover:-translate-y-0.5 transition-transform duration-300">
+          <div className="flex justify-between items-start">
+            <span className="text-label-md font-label-md text-on-surface-variant">Limite Disponível</span>
+            <span className="material-symbols-outlined text-tertiary-container opacity-70">money_range</span>
+          </div>
+          <div>
+            <span className="text-display-currency font-display-currency text-on-surface leading-none block mb-1">
+              R$ {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+            <div className="text-[11px] font-semibold text-on-surface-variant mt-1.5 flex items-center justify-between">
+              <span>Total de Limites: R$ {totalLimits.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
             </div>
-            <div>
-              <span className="text-display-currency font-display-currency text-on-surface leading-none block mb-1">
-                R$ {currentMonthSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </span>
-              
-              <div className="flex justify-between text-[11px] font-semibold text-on-surface-variant mt-1.5">
-                <span className="flex items-center gap-xs">
-                  <span className="w-1.5 h-1.5 rounded-full bg-secondary shrink-0" />
-                  Titular: R$ {currentMonthTitularSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-                <span className="flex items-center gap-xs">
-                  <span className="w-1.5 h-1.5 rounded-full bg-on-primary-container shrink-0" />
-                  Devedores: R$ {currentMonthDebtorsAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-              
-              <div className="w-full bg-surface-container-high h-1.5 rounded-full mt-2 flex overflow-hidden">
-                <div 
-                  className="bg-secondary h-1.5 transition-all" 
-                  style={{ width: `${currentMonthSpent > 0 ? (currentMonthTitularSpent / currentMonthSpent) * 100 : 0}%` }}
-                />
-                <div 
-                  className="bg-on-primary-container h-1.5 transition-all" 
-                  style={{ width: `${currentMonthSpent > 0 ? (currentMonthDebtorsAmount / currentMonthSpent) * 100 : 0}%` }}
-                />
-              </div>
+            <div className="w-full bg-surface-container-high h-1.5 rounded-full mt-2">
+              <div 
+                className="bg-tertiary-fixed-dim h-1.5 rounded-full transition-all" 
+                style={{ width: `${totalLimits > 0 ? (availableLimit / totalLimits) * 100 : 0}%` }}
+              />
             </div>
           </div>
-
-          {/* Card 2: Limite Disponível */}
-          <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between h-[136px] hover:-translate-y-0.5 transition-transform duration-300">
-            <div className="flex justify-between items-start">
-              <span className="text-label-md font-label-md text-on-surface-variant">Limite Disponível</span>
-              <span className="material-symbols-outlined text-tertiary-container opacity-70">money_range</span>
-            </div>
-            <div>
-              <span className="text-display-currency font-display-currency text-on-surface leading-none block mb-1">
-                R$ {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </span>
-              <div className="text-[11px] font-semibold text-on-surface-variant mt-1.5 flex items-center justify-between">
-                <span>Total de Limites: R$ {totalLimits.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="w-full bg-surface-container-high h-1.5 rounded-full mt-2">
-                <div 
-                  className="bg-tertiary-fixed-dim h-1.5 rounded-full transition-all" 
-                  style={{ width: `${totalLimits > 0 ? (availableLimit / totalLimits) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 3: Limite Utilizado */}
-          <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between h-[136px] hover:-translate-y-0.5 transition-transform duration-300">
-            <div className="flex justify-between items-start">
-              <span className="text-label-md font-label-md text-on-surface-variant">Total Utilizado</span>
-              <span className="material-symbols-outlined text-on-primary-container opacity-70">reorder</span>
-            </div>
-            <div>
-              <span className="text-display-currency font-display-currency text-on-surface leading-none block mb-1">
-                R$ {totalLimitUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </span>
-              <div className="text-[11px] font-semibold text-on-surface-variant mt-1.5 flex items-center justify-between">
-                <span>Comprometimento: {totalLimits > 0 ? ((totalLimitUsed / totalLimits) * 100).toFixed(1) : 0}%</span>
-              </div>
-              <div className="w-full bg-surface-container-high h-1.5 rounded-full mt-2">
-                <div 
-                  className="bg-rose-500 h-1.5 rounded-full transition-all" 
-                  style={{ width: `${totalLimits > 0 ? (totalLimitUsed / totalLimits) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 4: Gastos Compartilhados / A Receber */}
-          <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between h-[136px] hover:-translate-y-0.5 transition-transform duration-300">
-            <div className="flex justify-between items-start">
-              <span className="text-label-md font-label-md text-on-surface-variant">A Receber (Compartilhado)</span>
-              <span className="material-symbols-outlined text-secondary opacity-70">group</span>
-            </div>
-            <div>
-              <span className="text-display-currency font-display-currency text-on-surface leading-none block mb-1">
-                R$ {totalPendingDebtors.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </span>
-              <div className="text-[11px] font-semibold text-on-surface-variant mt-1.5 flex items-center justify-between">
-                <span>Total pendente geral</span>
-              </div>
-              <div className="w-full bg-surface-container-high h-1.5 rounded-full mt-2 opacity-0">
-                <div className="h-1.5 rounded-full" />
-              </div>
-            </div>
-          </div>
-
         </div>
 
-        {/* Right Column: Faturas por Cartão Block */}
+        {/* Card 2: Limite Utilizado */}
+        <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between h-[136px] hover:-translate-y-0.5 transition-transform duration-300">
+          <div className="flex justify-between items-start">
+            <span className="text-label-md font-label-md text-on-surface-variant">Total Utilizado</span>
+            <span className="material-symbols-outlined text-on-primary-container opacity-70">reorder</span>
+          </div>
+          <div>
+            <span className="text-display-currency font-display-currency text-on-surface leading-none block mb-1">
+              R$ {totalLimitUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+            <div className="text-[11px] font-semibold text-on-surface-variant mt-1.5 flex items-center justify-between">
+              <span>Comprometimento: {totalLimits > 0 ? ((totalLimitUsed / totalLimits) * 100).toFixed(1) : 0}%</span>
+            </div>
+            <div className="w-full bg-surface-container-high h-1.5 rounded-full mt-2">
+              <div 
+                className="bg-rose-500 h-1.5 rounded-full transition-all" 
+                style={{ width: `${totalLimits > 0 ? (totalLimitUsed / totalLimits) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Gastos Compartilhados / A Receber */}
+        <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between h-[136px] hover:-translate-y-0.5 transition-transform duration-300">
+          <div className="flex justify-between items-start">
+            <span className="text-label-md font-label-md text-on-surface-variant">A Receber (Compartilhado)</span>
+            <span className="material-symbols-outlined text-secondary opacity-70">group</span>
+          </div>
+          <div>
+            <span className="text-display-currency font-display-currency text-on-surface leading-none block mb-1">
+              R$ {totalPendingDebtors.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+            <div className="text-[11px] font-semibold text-on-surface-variant mt-1.5 flex items-center justify-between">
+              <span>Total pendente geral</span>
+            </div>
+            <div className="w-full bg-surface-container-high h-1.5 rounded-full mt-2 opacity-0">
+              <div className="h-1.5 rounded-full" />
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Listas de Faturas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
+        
+        {/* Bloco: Fatura Atual por Cartão */}
         <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col h-[288px]">
           <div className="flex justify-between items-center mb-sm">
             <h3 className="text-body-md font-body-md font-semibold text-on-surface flex items-center gap-xs">
               <span className="material-symbols-outlined text-secondary opacity-70">credit_card</span>
-              Faturas do Mês
+              Fatura Atual
             </h3>
             <Link href="/invoices" className="text-label-sm font-label-sm text-secondary hover:underline font-semibold">
               Ver faturas
             </Link>
           </div>
           
-          <div className="flex-1 overflow-y-auto pr-1 -mr-1 space-y-xs scrollbar-thin">
+          <div className="flex-1 overflow-y-auto pr-1 -mr-1 divide-y divide-outline-variant/10 scrollbar-thin">
             {cards.map((card) => {
               const invoice = activeCurrentMonthInvoices.find(inv => inv.cardId === card.id);
               const invoiceAmount = invoice ? invoice.totalAmount : 0.0;
               const status = invoice ? invoice.status : 'open';
               const bankInfo = getBankIcon(card.bankName, card.color || undefined);
               
+              // Calcular valores de titular e devedor
+              const debtorsAmount = invoice ? invoice.installments.reduce((instSum, inst) => {
+                const splitSum = inst.splits ? inst.splits.reduce((sSum, split) => sSum + split.amount, 0) : 0;
+                return instSum + splitSum;
+              }, 0) : 0;
+              const titularAmount = invoiceAmount - debtorsAmount;
+
+              const dateDetails = getInvoiceDisplayDateDetails(card, invoice, targetRefMonth, targetRefYear);
+
               return (
-                <div key={card.id} className="flex items-center justify-between p-xs rounded-lg hover:bg-surface-container-low/40 transition-colors">
-                  <div className="flex items-center gap-sm min-w-0">
-                    <div 
-                      className="w-8 h-8 rounded-lg border flex items-center justify-center font-black text-xs select-none shrink-0"
-                      style={bankInfo.style}
-                    >
-                      {bankInfo.text}
+                <div key={card.id} className="py-sm">
+                  <div className="flex items-center justify-between">
+                    {/* Left: bank icon and info */}
+                    <div className="flex items-center gap-sm min-w-0 flex-1">
+                      <div 
+                        className="w-8 h-8 rounded-lg border flex items-center justify-center font-black text-xs select-none shrink-0"
+                        style={bankInfo.style}
+                      >
+                        {bankInfo.text}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-body-sm font-medium text-on-surface truncate">{card.name}</p>
+                        <p className="text-[10px] text-on-surface-variant truncate">
+                          Fecha {dateDetails.closingDateStr} • Vence {dateDetails.dueDateStr} • Ref: {dateDetails.refMonthStr}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-body-sm font-medium text-on-surface truncate">{card.name}</p>
-                      <p className="text-[10px] text-on-surface-variant truncate">{card.bankName}</p>
+
+                    {/* Middle: Titular vs Devedores split in text */}
+                    <div className="flex flex-col gap-[2px] text-[11px] text-on-surface-variant font-semibold flex-1 justify-center pl-4">
+                      <span className="flex items-center gap-xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-secondary shrink-0" />
+                        Titular: R$ {titularAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className="flex items-center gap-xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-on-primary-container shrink-0" />
+                        Devedores: R$ {debtorsAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
                     </div>
-                  </div>
-                  <div className="flex flex-col items-end shrink-0 pl-sm">
-                    <span className="text-body-sm font-semibold text-on-surface">
-                      R$ {invoiceAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </span>
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-1 ${
-                      status === 'overdue' 
-                        ? 'bg-error-container text-on-error-container' 
-                        : status === 'closed' 
-                        ? 'bg-secondary-fixed text-on-secondary-fixed-variant'
-                        : status === 'paid'
-                        ? 'bg-tertiary-fixed text-on-tertiary-container'
-                        : 'bg-surface-container-highest text-on-surface-variant'
-                    }`}>
-                      {status === 'overdue' ? 'Vencida' : status === 'closed' ? 'Fechada' : status === 'paid' ? 'Pago' : 'Aberta'}
-                    </span>
+
+                    {/* Right: Total amount and status badge */}
+                    <div className="flex flex-col items-end shrink-0 pl-sm min-w-[100px]">
+                      <span className="text-body-sm font-bold text-on-surface">
+                        R$ {invoiceAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-1 ${
+                        status === 'overdue' 
+                          ? 'bg-error-container text-on-error-container' 
+                          : status === 'closed' 
+                          ? 'bg-secondary-fixed text-on-secondary-fixed-variant'
+                          : status === 'paid'
+                          ? 'bg-tertiary-fixed text-on-tertiary-container'
+                          : 'bg-surface-container-highest text-on-surface-variant'
+                      }`}>
+                        {status === 'overdue' ? 'Vencida' : status === 'closed' ? 'Fechada' : status === 'paid' ? 'Pago' : 'Aberta'}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -417,6 +490,132 @@ export default async function DashboardPage() {
                 Nenhum cartão cadastrado.
               </div>
             )}
+          </div>
+
+          {/* Footer TOTAL GERAL */}
+          <div className="pt-sm mt-sm border-t border-outline-variant/20 flex items-center justify-between">
+            <span className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">TOTAL GERAL</span>
+            
+            <div className="flex gap-md text-[11px] font-semibold text-on-surface-variant justify-center flex-1 pl-4">
+              <span className="flex items-center gap-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-secondary shrink-0" />
+                Titular: R$ {currentMonthTitularSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </span>
+              <span className="flex items-center gap-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-on-primary-container shrink-0" />
+                Devedores: R$ {currentMonthDebtorsAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            
+            <span className="text-body-md font-bold text-on-surface min-w-[100px] text-right">
+              R$ {currentMonthSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+
+        {/* Bloco: Próximas Faturas (antigo Faturas do Mês) */}
+        <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col h-[288px]">
+          <div className="flex justify-between items-center mb-sm">
+            <h3 className="text-body-md font-body-md font-semibold text-on-surface flex items-center gap-xs">
+              <span className="material-symbols-outlined text-secondary opacity-70">calendar_month</span>
+              Próximas Faturas
+            </h3>
+            <Link href="/invoices" className="text-label-sm font-label-sm text-secondary hover:underline font-semibold">
+              Ver faturas
+            </Link>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto pr-1 -mr-1 divide-y divide-outline-variant/10 scrollbar-thin">
+            {activeAlertInvoices.map((inv) => {
+              const bankInfo = getBankIcon(inv.card.bankName, inv.card.color || undefined);
+              const status = inv.status;
+              
+              // Calcular valores de titular e devedor
+              const debtorsAmount = inv.installments.reduce((instSum, inst) => {
+                const splitSum = inst.splits ? inst.splits.reduce((sSum, split) => sSum + split.amount, 0) : 0;
+                return instSum + splitSum;
+              }, 0);
+              const titularAmount = inv.totalAmount - debtorsAmount;
+
+              const dateDetails = getInvoiceDisplayDateDetails(inv.card, inv, inv.referenceMonth, inv.referenceYear);
+
+              return (
+                <div key={inv.id} className="py-sm">
+                  <div className="flex items-center justify-between">
+                    {/* Left: bank icon and info */}
+                    <div className="flex items-center gap-sm min-w-0 flex-1">
+                      <div 
+                        className="w-8 h-8 rounded-lg border flex items-center justify-center font-black text-xs select-none shrink-0"
+                        style={bankInfo.style}
+                      >
+                        {bankInfo.text}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-body-sm font-medium text-on-surface truncate">{inv.card.name}</p>
+                        <p className="text-[10px] text-on-surface-variant truncate">
+                          Fecha {dateDetails.closingDateStr} • Vence {dateDetails.dueDateStr} • Ref: {dateDetails.refMonthStr}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Middle: Titular vs Devedores split in text */}
+                    <div className="flex flex-col gap-[2px] text-[11px] text-on-surface-variant font-semibold flex-1 justify-center pl-4">
+                      <span className="flex items-center gap-xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-secondary shrink-0" />
+                        Titular: R$ {titularAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className="flex items-center gap-xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-on-primary-container shrink-0" />
+                        Devedores: R$ {debtorsAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    {/* Right: Total amount and status badge */}
+                    <div className="flex flex-col items-end shrink-0 pl-sm min-w-[100px]">
+                      <span className="text-body-sm font-bold text-on-surface">
+                        R$ {inv.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-1 ${
+                        status === 'overdue' 
+                          ? 'bg-error-container text-on-error-container' 
+                          : status === 'closed' 
+                          ? 'bg-secondary-fixed text-on-secondary-fixed-variant'
+                          : status === 'paid'
+                          ? 'bg-tertiary-fixed text-on-tertiary-container'
+                          : 'bg-surface-container-highest text-on-surface-variant'
+                      }`}>
+                        {status === 'overdue' ? 'Vencida' : status === 'closed' ? 'Fechada' : status === 'paid' ? 'Pago' : 'Aberta'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {activeAlertInvoices.length === 0 && (
+              <div className="text-center py-8 text-xs text-on-surface-variant opacity-60">
+                Nenhuma fatura futura pendente.
+              </div>
+            )}
+          </div>
+
+          {/* Footer TOTAL GERAL */}
+          <div className="pt-sm mt-sm border-t border-outline-variant/20 flex items-center justify-between">
+            <span className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">TOTAL GERAL</span>
+            
+            <div className="flex gap-md text-[11px] font-semibold text-on-surface-variant justify-center flex-1 pl-4">
+              <span className="flex items-center gap-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-secondary shrink-0" />
+                Titular: R$ {totalUpcomingTitular.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </span>
+              <span className="flex items-center gap-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-on-primary-container shrink-0" />
+                Devedores: R$ {totalUpcomingDebtors.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            
+            <span className="text-body-md font-bold text-on-surface min-w-[100px] text-right">
+              R$ {totalUpcomingSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
           </div>
         </div>
 

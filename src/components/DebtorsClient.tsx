@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import MonthPicker from './MonthPicker';
 import { useDialog } from './DialogProvider';
@@ -38,6 +38,7 @@ interface TransactionDetail {
   description: string;
   purchaseDate: string;
   installmentsCount: number;
+  installmentStart?: number;
 }
 
 interface CardDetail {
@@ -56,6 +57,10 @@ interface InstallmentDetail {
   debtorPaidAt?: string | null;
   transaction: TransactionDetail;
   card: CardDetail;
+  invoice?: {
+    referenceMonth: number;
+    referenceYear: number;
+  } | null;
 }
 
 interface Debtor {
@@ -88,13 +93,30 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
   const [filterMonth, setFilterMonth] = useState('this-month');
 
+  const getInstallmentDisplayDate = (inst: InstallmentDetail) => {
+    // Calendar purchase date
+    const startNum = inst.transaction.installmentStart || 1;
+    const i = inst.installmentNumber - startNum + 1;
+    const [pYear, pMonth, pDay] = inst.transaction.purchaseDate.split('-').map(Number);
+    const date = new Date(Date.UTC(pYear, pMonth - 1, pDay));
+    date.setUTCMonth(date.getUTCMonth() + (i - 1));
+    const month = date.getUTCMonth() + 1;
+    const year = date.getUTCFullYear();
+
+    return { month, year };
+  };
+
   const router = useRouter();
 
   const selectedDebtor = debtors.find(d => d.id === selectedDebtorId);
 
   const pendingAmountForPeriod = selectedDebtor
     ? selectedDebtor.installments
-        .filter(inst => !inst.debtorPaid && matchMonthFilter(filterMonth, inst.dueMonth, inst.dueYear))
+        .filter(inst => {
+          if (inst.debtorPaid) return false;
+          const { month, year } = getInstallmentDisplayDate(inst);
+          return matchMonthFilter(filterMonth, month, year);
+        })
         .reduce((sum, inst) => sum + inst.debtorAmount, 0)
     : 0;
 
@@ -232,7 +254,8 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
         statusFilter === 'all' || 
         (statusFilter === 'pending' && !inst.debtorPaid) ||
         (statusFilter === 'paid' && inst.debtorPaid);
-      const matchesMonth = matchMonthFilter(filterMonth, inst.dueMonth, inst.dueYear);
+      const { month, year } = getInstallmentDisplayDate(inst);
+      const matchesMonth = matchMonthFilter(filterMonth, month, year);
       return matchesSearch && matchesStatus && matchesMonth;
     });
   };
@@ -544,7 +567,10 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
                             <span>•</span>
                             <span className="flex items-center gap-[2px]">
                               <span className="material-symbols-outlined text-[12px]">calendar_month</span>
-                              Ref: {getMonthName(inst.dueMonth)}/{inst.dueYear}
+                              Ref: {(() => {
+                                const { month, year } = getInstallmentDisplayDate(inst);
+                                return `${getMonthName(month)}/${year}`;
+                              })()}
                             </span>
                           </div>
                         </div>

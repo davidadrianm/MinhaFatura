@@ -274,8 +274,7 @@ export default function TransactionsClient({
 
   // Handle automatic decimal formatting (comma as decimal separator)
   const handleAmountChange = (val: string) => {
-    const isNegativeEnabled = typeof window !== 'undefined' && localStorage.getItem('pref_allow_negative') === 'true';
-    const hasMinus = isNegativeEnabled && val.includes('-');
+    const hasMinus = val.includes('-');
     
     const digits = val.replace(/\D/g, '');
     if (!digits) {
@@ -295,8 +294,7 @@ export default function TransactionsClient({
 
   // Handle automatic decimal formatting for debtor split amount (comma as decimal separator)
   const handleSplitAmountChange = (val: string) => {
-    const isNegativeEnabled = typeof window !== 'undefined' && localStorage.getItem('pref_allow_negative') === 'true';
-    const hasMinus = isNegativeEnabled && val.includes('-');
+    const hasMinus = val.includes('-');
     
     const digits = val.replace(/\D/g, '');
     if (!digits) {
@@ -448,20 +446,19 @@ export default function TransactionsClient({
     const amountVal = parseFloat(splitDebtorAmount);
     const totalVal = parseFloat(amountTotal);
     
-    const isNegativeEnabled = typeof window !== 'undefined' && localStorage.getItem('pref_allow_negative') === 'true';
-    if (isNaN(amountVal) || (isNegativeEnabled ? amountVal === 0 : amountVal <= 0)) {
-      setError(isNegativeEnabled ? 'Digite um valor válido diferente de zero para a divisão.' : 'Digite um valor válido maior que zero para a divisão.');
+    if (isNaN(amountVal) || amountVal === 0) {
+      setError('Digite um valor válido diferente de zero para a divisão.');
       modalBodyRef.current?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
     
-    if (isNaN(totalVal) || (isNegativeEnabled ? totalVal === 0 : totalVal <= 0)) {
+    if (isNaN(totalVal) || totalVal === 0) {
       setError('Preencha o valor total da compra primeiro.');
       modalBodyRef.current?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
 
-    if (isNegativeEnabled && Math.sign(amountVal) !== Math.sign(totalVal)) {
+    if (Math.sign(amountVal) !== Math.sign(totalVal)) {
       setError('O valor da divisão deve ter o mesmo sinal (positivo/negativo) que o valor total da compra.');
       modalBodyRef.current?.scrollIntoView({ behavior: 'smooth' });
       return;
@@ -510,9 +507,8 @@ export default function TransactionsClient({
     }
 
     const totalVal = parseFloat(amountTotal);
-    const isNegativeEnabled = typeof window !== 'undefined' && localStorage.getItem('pref_allow_negative') === 'true';
-    if (isNaN(totalVal) || (isNegativeEnabled ? totalVal === 0 : totalVal <= 0)) {
-      setError(isNegativeEnabled ? 'Por favor, insira um valor total diferente de zero.' : 'Por favor, insira um valor total maior que zero.');
+    if (isNaN(totalVal) || totalVal === 0) {
+      setError('Por favor, insira um valor total diferente de zero.');
       setLoading(false);
       return;
     }
@@ -529,7 +525,7 @@ export default function TransactionsClient({
         setLoading(false);
         return;
       }
-      if (isNegativeEnabled && formSplits.some(s => Math.sign(parseFloat(s.amount)) !== Math.sign(totalVal))) {
+      if (formSplits.some(s => Math.sign(parseFloat(s.amount)) !== Math.sign(totalVal))) {
         setError('Todas as divisões devem ter o mesmo sinal (positivo/negativo) que o valor total da compra.');
         setLoading(false);
         return;
@@ -607,7 +603,10 @@ export default function TransactionsClient({
     
     if (filter && tx.recurrenceType === 'installments') {
       const inst = tx.installments?.find(
-        i => i.dueMonth === filter.month && i.dueYear === filter.year
+        i => {
+          const instPurchase = getInstallmentPurchaseDate(tx, i);
+          return instPurchase.month === filter.month && instPurchase.year === filter.year;
+        }
       );
       if (inst) {
         amountVal = inst.amount;
@@ -632,7 +631,10 @@ export default function TransactionsClient({
     let initialInstallmentStart = tx.installmentStart || 1;
     if (filter && tx.recurrenceType && tx.recurrenceType !== 'none') {
       const inst = tx.installments?.find(
-        i => i.dueMonth === filter.month && i.dueYear === filter.year
+        i => {
+          const instPurchase = getInstallmentPurchaseDate(tx, i);
+          return instPurchase.month === filter.month && instPurchase.year === filter.year;
+        }
       );
       if (inst) {
         const i = inst.installmentNumber - (tx.installmentStart || 1) + 1;
@@ -707,9 +709,8 @@ export default function TransactionsClient({
     setError('');
 
     const totalVal = parseFloat(amountTotal);
-    const isNegativeEnabled = typeof window !== 'undefined' && localStorage.getItem('pref_allow_negative') === 'true';
-    if (isNaN(totalVal) || (isNegativeEnabled ? totalVal === 0 : totalVal <= 0)) {
-      setError(isNegativeEnabled ? 'Por favor, insira um valor total diferente de zero.' : 'Por favor, insira um valor total maior que zero.');
+    if (isNaN(totalVal) || totalVal === 0) {
+      setError('Por favor, insira um valor total diferente de zero.');
       return;
     }
 
@@ -723,7 +724,7 @@ export default function TransactionsClient({
         setError('A soma das divisões não pode exceder o valor total da compra.');
         return;
       }
-      if (isNegativeEnabled && formSplits.some(s => Math.sign(parseFloat(s.amount)) !== Math.sign(totalVal))) {
+      if (formSplits.some(s => Math.sign(parseFloat(s.amount)) !== Math.sign(totalVal))) {
         setError('Todas as divisões devem ter o mesmo sinal (positivo/negativo) que o valor total da compra.');
         return;
       }

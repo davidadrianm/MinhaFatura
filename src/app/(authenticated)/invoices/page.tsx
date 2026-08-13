@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import InvoicesClient from '@/components/InvoicesClient';
 import { redirect } from 'next/navigation';
 import { getInvoiceStatus } from '@/lib/invoice-utils';
+import { Suspense } from 'react';
+import InvoicesSkeleton from '@/components/skeletons/InvoicesSkeleton';
 
 export const revalidate = 0; // Evita cache em desenvolvimento
 
@@ -11,6 +13,16 @@ export default async function InvoicesPage() {
   if (!user) {
     redirect('/');
   }
+
+  return (
+    <Suspense fallback={<InvoicesSkeleton />}>
+      <InvoicesDataWrapper userId={user.userId} />
+    </Suspense>
+  );
+}
+
+async function InvoicesDataWrapper({ userId }: { userId: string }) {
+  const user = { userId };
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1; // 1-indexed (Jan = 1)

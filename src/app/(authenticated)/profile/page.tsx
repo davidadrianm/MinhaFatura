@@ -28,9 +28,6 @@ export default function ProfilePage() {
   // Form states for general preferences
   const [currency, setCurrency] = useState('BRL');
   const [centRounding, setCentRounding] = useState('first');
-  const [allowNegative, setAllowNegative] = useState(false);
-  const [viewByReferenceMonth, setViewByReferenceMonth] = useState(false);
-  const [showPreviousMonthInvoice, setShowPreviousMonthInvoice] = useState(false);
   const [prefSuccess, setPrefSuccess] = useState('');
   const [prefError, setPrefError] = useState('');
 
@@ -85,15 +82,6 @@ export default function ProfilePage() {
       const storedCentRounding = localStorage.getItem('pref_cent_rounding');
       if (storedCentRounding) setCentRounding(storedCentRounding);
 
-      const storedAllowNegative = localStorage.getItem('pref_allow_negative');
-      if (storedAllowNegative) setAllowNegative(storedAllowNegative === 'true');
-
-      const storedViewByReferenceMonth = localStorage.getItem('pref_view_by_reference_month');
-      if (storedViewByReferenceMonth) setViewByReferenceMonth(storedViewByReferenceMonth === 'true');
-
-      const storedShowPreviousMonthInvoice = localStorage.getItem('pref_show_previous_month_invoice');
-      if (storedShowPreviousMonthInvoice) setShowPreviousMonthInvoice(storedShowPreviousMonthInvoice === 'true');
-
       const storedNotifyInvoice = localStorage.getItem('pref_notify_invoice_close');
       if (storedNotifyInvoice) setNotifyInvoiceClose(storedNotifyInvoice === 'true');
 
@@ -113,9 +101,6 @@ export default function ProfilePage() {
     try {
       localStorage.setItem('pref_currency', currency);
       localStorage.setItem('pref_cent_rounding', centRounding);
-      localStorage.setItem('pref_allow_negative', allowNegative.toString());
-      localStorage.setItem('pref_view_by_reference_month', viewByReferenceMonth.toString());
-      localStorage.setItem('pref_show_previous_month_invoice', showPreviousMonthInvoice.toString());
       setPrefSuccess('Parâmetros de preferências salvos com sucesso!');
       setTimeout(() => setPrefSuccess(''), 3000);
     } catch (err) {
@@ -726,47 +711,8 @@ export default function ProfilePage() {
                       </div>
                     </div>
 
-                    {/* Valor negativo na transação */}
-                    <label className="flex items-center gap-sm p-sm bg-surface-container-low/40 border border-outline-variant/20 rounded-xl cursor-pointer select-none hover:bg-surface-container-low transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={allowNegative}
-                        onChange={(e) => setAllowNegative(e.target.checked)}
-                        className="h-5 w-5 accent-secondary shrink-0"
-                      />
-                      <div>
-                        <span className="block text-label-md font-bold text-on-surface">Valor negativo na transação</span>
-                        <span className="block text-label-sm text-on-surface-variant mt-xs">Permitir a inserção de valores negativos (-) ao cadastrar ou editar transações.</span>
-                      </div>
-                    </label>
 
-                    {/* Visualizar como mês de referência */}
-                    <label className="flex items-center gap-sm p-sm bg-surface-container-low/40 border border-outline-variant/20 rounded-xl cursor-pointer select-none hover:bg-surface-container-low transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={viewByReferenceMonth}
-                        onChange={(e) => setViewByReferenceMonth(e.target.checked)}
-                        className="h-5 w-5 accent-secondary shrink-0"
-                      />
-                      <div>
-                        <span className="block text-label-md font-bold text-on-surface">Visualizar como mês de referência</span>
-                        <span className="block text-label-sm text-on-surface-variant mt-xs">Na tela de faturas, ao invés de filtrar pelo mês de referência (compras), filtra pelo mês de vencimento (mantendo a descrição da fatura original).</span>
-                      </div>
-                    </label>
 
-                    {/* Mostrar fatura de mês anterior */}
-                    <label className="flex items-center gap-sm p-sm bg-surface-container-low/40 border border-outline-variant/20 rounded-xl cursor-pointer select-none hover:bg-surface-container-low transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={showPreviousMonthInvoice}
-                        onChange={(e) => setShowPreviousMonthInvoice(e.target.checked)}
-                        className="h-5 w-5 accent-secondary shrink-0"
-                      />
-                      <div>
-                        <span className="block text-label-md font-bold text-on-surface">Mostrar fatura de mês anterior</span>
-                        <span className="block text-label-sm text-on-surface-variant mt-xs">Na tela de faturas, ao selecionar o mês, será mostrado a fatura do mês anterior com o descritivo e as datas de vencimento/fechamento correspondentes ao mês filtrado.</span>
-                      </div>
-                    </label>
                   </div>
 
                   <div className="flex justify-end pt-md border-t border-outline-variant/10">

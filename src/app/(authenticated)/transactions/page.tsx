@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import TransactionsClient from '@/components/TransactionsClient';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
+import TransactionsSkeleton from '@/components/skeletons/TransactionsSkeleton';
 
 export const revalidate = 0; // Evita cache em desenvolvimento
 
@@ -11,6 +12,16 @@ export default async function TransactionsPage() {
   if (!user) {
     redirect('/');
   }
+
+  return (
+    <Suspense fallback={<TransactionsSkeleton />}>
+      <TransactionsDataWrapper userId={user.userId} />
+    </Suspense>
+  );
+}
+
+async function TransactionsDataWrapper({ userId }: { userId: string }) {
+  const user = { userId };
 
   // Busca os cartões, categorias, devedores e transações em paralelo para reduzir latência
   const [cards, categories, debtors, transactions] = await Promise.all([

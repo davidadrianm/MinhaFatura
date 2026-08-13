@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import CardsClient from '@/components/CardsClient';
 import { redirect } from 'next/navigation';
 import { calculateUsedLimit } from '@/lib/invoice-utils';
+import { Suspense } from 'react';
+import CardsSkeleton from '@/components/skeletons/CardsSkeleton';
 
 export const revalidate = 0; // Evita cache em desenvolvimento
 
@@ -11,6 +13,16 @@ export default async function CardsPage() {
   if (!user) {
     redirect('/');
   }
+
+  return (
+    <Suspense fallback={<CardsSkeleton />}>
+      <CardsDataWrapper userId={user.userId} />
+    </Suspense>
+  );
+}
+
+async function CardsDataWrapper({ userId }: { userId: string }) {
+  const user = { userId };
 
   // Busca os cartões ativos do usuário
   const cards = await prisma.creditCard.findMany({

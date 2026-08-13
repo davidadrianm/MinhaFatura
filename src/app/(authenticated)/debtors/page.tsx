@@ -2,6 +2,8 @@ import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import DebtorsClient from '@/components/DebtorsClient';
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
+import DebtorsSkeleton from '@/components/skeletons/DebtorsSkeleton';
 
 export const revalidate = 0; // Evita cache em desenvolvimento
 
@@ -10,6 +12,16 @@ export default async function DebtorsPage() {
   if (!user) {
     redirect('/');
   }
+
+  return (
+    <Suspense fallback={<DebtorsSkeleton />}>
+      <DebtorsDataWrapper userId={user.userId} />
+    </Suspense>
+  );
+}
+
+async function DebtorsDataWrapper({ userId }: { userId: string }) {
+  const user = { userId };
 
   // Busca todos os devedores do usuário logado, incluindo seus splits de parcelas
   const debtors = await prisma.debtor.findMany({
@@ -23,12 +35,19 @@ export default async function DebtorsPage() {
                 select: {
                   description: true,
                   purchaseDate: true,
-                  installmentsCount: true
+                  installmentsCount: true,
+                  installmentStart: true
                 }
               },
               card: {
                 select: {
                   name: true
+                }
+              },
+              invoice: {
+                select: {
+                  referenceMonth: true,
+                  referenceYear: true
                 }
               }
             }
@@ -61,11 +80,16 @@ export default async function DebtorsPage() {
       transaction: {
         description: split.installment.transaction.description,
         purchaseDate: split.installment.transaction.purchaseDate.toISOString().split('T')[0],
-        installmentsCount: split.installment.transaction.installmentsCount
+        installmentsCount: split.installment.transaction.installmentsCount,
+        installmentStart: split.installment.transaction.installmentStart
       },
       card: {
         name: split.installment.card.name
-      }
+      },
+      invoice: split.installment.invoice ? {
+        referenceMonth: split.installment.invoice.referenceMonth,
+        referenceYear: split.installment.invoice.referenceYear
+      } : null
     }));
 
     // Ordena as parcelas no JS de forma decrescente por vencimento

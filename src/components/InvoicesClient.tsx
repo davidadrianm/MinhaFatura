@@ -137,59 +137,28 @@ const getInvoiceDisplayMonthYear = (dueDateStr: string) => {
 };
 
 const getInvoiceDisplayData = (
-  inv: { referenceMonth: number; referenceYear: number; closingDate: string; dueDate: string },
-  viewByReferenceMonth: boolean,
-  showPreviousMonthInvoice: boolean
+  inv: { referenceMonth: number; referenceYear: number; closingDate: string; dueDate: string }
 ) => {
-  // 1. Obter o mês/ano base de referência das compras
-  let month = inv.referenceMonth;
-  let year = inv.referenceYear;
-
-  // Se 'Visualizar como mês de referência' estiver ativo, o mês base é o mês de vencimento
-  if (viewByReferenceMonth) {
-    const due = new Date(inv.dueDate);
-    month = due.getUTCMonth() + 1;
-    year = due.getUTCFullYear();
-  }
-
-  let closingDate = inv.closingDate;
-  let dueDate = inv.dueDate;
-
-  // 2. Se 'Mostrar fatura de mês anterior' estiver ativo, avançamos o mês de exibição e as datas em 1 mês
-  if (showPreviousMonthInvoice) {
-    month += 1;
-    if (month > 12) {
-      month = 1;
-      year += 1;
-    }
-
-    const cDate = new Date(inv.closingDate);
-    cDate.setUTCMonth(cDate.getUTCMonth() + 1);
-    closingDate = cDate.toISOString();
-
-    const dDate = new Date(inv.dueDate);
-    dDate.setUTCMonth(dDate.getUTCMonth() + 1);
-    dueDate = dDate.toISOString();
-  }
+  const due = new Date(inv.dueDate);
+  const month = due.getUTCMonth() + 1;
+  const year = due.getUTCFullYear();
 
   return {
     month,
     year,
-    closingDate,
-    dueDate
+    closingDate: inv.closingDate,
+    dueDate: inv.dueDate
   };
 };
 
 const matchMonthFilter = (
   filterVal: string,
-  inv: Invoice,
-  viewByReferenceMonth: boolean,
-  showPreviousMonthInvoice: boolean
+  inv: Invoice
 ) => {
   if (filterVal === 'all') return true;
 
   const now = new Date();
-  const display = getInvoiceDisplayData(inv, viewByReferenceMonth, showPreviousMonthInvoice);
+  const display = getInvoiceDisplayData(inv);
   const targetMonth = display.month;
   const targetYear = display.year;
 
@@ -270,19 +239,9 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
   const [filterCard, setFilterCard] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterMonth, setFilterMonth] = useState('this-month');
-  const [viewByReferenceMonth, setViewByReferenceMonth] = useState(false);
-  const [showPreviousMonthInvoice, setShowPreviousMonthInvoice] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('pref_view_by_reference_month');
-      const isRefView = stored === 'true';
-      setViewByReferenceMonth(isRefView);
-
-      const storedShowPrev = localStorage.getItem('pref_show_previous_month_invoice');
-      const isShowPrev = storedShowPrev === 'true';
-      setShowPreviousMonthInvoice(isShowPrev);
-      
       // Ajusta as faturas inicialmente expandidas para o mês atual com base na preferência carregada
       const now = new Date();
       const currentMonth = now.getMonth() + 1;
@@ -290,7 +249,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
       
       const initialExpanded = new Set<string>();
       initialInvoices.forEach(inv => {
-        const display = getInvoiceDisplayData(inv, isRefView, isShowPrev);
+        const display = getInvoiceDisplayData(inv);
         const targetMonth = display.month;
         const targetYear = display.year;
           
@@ -307,7 +266,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
     const headers = ['Mês Referência', 'Cartão', 'Fechamento', 'Vencimento', 'Total (R$)', 'Status'];
     
     const rows = filteredInvoices.map(inv => {
-      const display = getInvoiceDisplayData(inv, viewByReferenceMonth, showPreviousMonthInvoice);
+      const display = getInvoiceDisplayData(inv);
       const refMonthStr = `${getMonthName(display.month)} de ${display.year}`;
       const card = inv.card.name;
       const closing = new Date(display.closingDate).toLocaleDateString('pt-BR');
@@ -434,7 +393,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
   const filteredInvoices = invoices.filter((inv) => {
     const matchesCard = filterCard === 'all' || inv.card.id === filterCard;
     const matchesStatus = filterStatus === 'all' || inv.status === filterStatus;
-    const matchesMonth = matchMonthFilter(filterMonth, inv, viewByReferenceMonth, showPreviousMonthInvoice);
+    const matchesMonth = matchMonthFilter(filterMonth, inv);
     return matchesCard && matchesStatus && matchesMonth;
   });
 
@@ -557,7 +516,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
         {filteredInvoices.map((inv) => {
           const isExpanded = expandedInvoiceIds.has(inv.id);
           const isLoading = loadingId === inv.id;
-          const display = getInvoiceDisplayData(inv, viewByReferenceMonth, showPreviousMonthInvoice);
+          const display = getInvoiceDisplayData(inv);
 
           return (
             <div 
