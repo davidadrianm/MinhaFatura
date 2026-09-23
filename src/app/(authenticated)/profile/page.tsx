@@ -28,6 +28,7 @@ export default function ProfilePage() {
   // Form states for general preferences
   const [currency, setCurrency] = useState('BRL');
   const [centRounding, setCentRounding] = useState('first');
+  const [showTxByInvoice, setShowTxByInvoice] = useState(false);
   const [prefSuccess, setPrefSuccess] = useState('');
   const [prefError, setPrefError] = useState('');
 
@@ -82,6 +83,9 @@ export default function ProfilePage() {
       const storedCentRounding = localStorage.getItem('pref_cent_rounding');
       if (storedCentRounding) setCentRounding(storedCentRounding);
 
+      const storedShowTxByInvoice = localStorage.getItem('pref_show_tx_by_invoice');
+      if (storedShowTxByInvoice) setShowTxByInvoice(storedShowTxByInvoice === 'true');
+
       const storedNotifyInvoice = localStorage.getItem('pref_notify_invoice_close');
       if (storedNotifyInvoice) setNotifyInvoiceClose(storedNotifyInvoice === 'true');
 
@@ -101,6 +105,7 @@ export default function ProfilePage() {
     try {
       localStorage.setItem('pref_currency', currency);
       localStorage.setItem('pref_cent_rounding', centRounding);
+      localStorage.setItem('pref_show_tx_by_invoice', showTxByInvoice.toString());
       setPrefSuccess('Parâmetros de preferências salvos com sucesso!');
       setTimeout(() => setPrefSuccess(''), 3000);
     } catch (err) {
@@ -681,39 +686,52 @@ export default function ProfilePage() {
                     </div>
                   )}
 
-                  <div className="space-y-md pt-sm">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-                      {/* Moeda Padrão */}
-                      <div className="space-y-xs">
-                        <label className="block text-label-sm font-label-sm text-on-surface-variant">Moeda do Sistema</label>
-                        <select
-                          value={currency}
-                          onChange={(e) => setCurrency(e.target.value)}
-                          className="w-full bg-surface border border-outline-variant text-body-md font-body-md text-on-surface rounded-lg py-sm px-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm transition-all"
-                        >
-                          <option value="BRL">Real (R$)</option>
-                          <option value="USD">Dólar ($)</option>
-                          <option value="EUR">Euro (€)</option>
-                        </select>
+                    <div className="space-y-md pt-sm">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+                        {/* Moeda Padrão */}
+                        <div className="space-y-xs">
+                          <label className="block text-label-sm font-label-sm text-on-surface-variant">Moeda do Sistema</label>
+                          <select
+                            value={currency}
+                            onChange={(e) => setCurrency(e.target.value)}
+                            className="w-full bg-surface border border-outline-variant text-body-md font-body-md text-on-surface rounded-lg py-sm px-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm transition-all"
+                          >
+                            <option value="BRL">Real (R$)</option>
+                            <option value="USD">Dólar ($)</option>
+                            <option value="EUR">Euro (€)</option>
+                          </select>
+                        </div>
+
+                        {/* Arredondamento de Centavos */}
+                        <div className="space-y-xs">
+                          <label className="block text-label-sm font-label-sm text-on-surface-variant">Arredondamento de Centavos</label>
+                          <select
+                            value={centRounding}
+                            onChange={(e) => setCentRounding(e.target.value)}
+                            className="w-full bg-surface border border-outline-variant text-body-md font-body-md text-on-surface rounded-lg py-sm px-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm transition-all"
+                          >
+                            <option value="first">Primeira Parcela (Padrão)</option>
+                            <option value="last">Última Parcela</option>
+                          </select>
+                        </div>
                       </div>
 
-                      {/* Arredondamento de Centavos */}
-                      <div className="space-y-xs">
-                        <label className="block text-label-sm font-label-sm text-on-surface-variant">Arredondamento de Centavos</label>
-                        <select
-                          value={centRounding}
-                          onChange={(e) => setCentRounding(e.target.value)}
-                          className="w-full bg-surface border border-outline-variant text-body-md font-body-md text-on-surface rounded-lg py-sm px-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm transition-all"
-                        >
-                          <option value="first">Primeira Parcela (Padrão)</option>
-                          <option value="last">Última Parcela</option>
-                        </select>
-                      </div>
+                      {/* Mostrar transações conforme fatura */}
+                      <label className="flex items-center gap-sm p-sm bg-surface-container-low/40 border border-outline-variant/20 rounded-xl cursor-pointer select-none hover:bg-surface-container-low transition-colors mt-sm">
+                        <input
+                          type="checkbox"
+                          checked={showTxByInvoice}
+                          onChange={(e) => setShowTxByInvoice(e.target.checked)}
+                          className="h-5 w-5 accent-secondary shrink-0"
+                        />
+                        <div>
+                          <span className="block text-label-md font-bold text-on-surface">Mostrar transações conforme fatura</span>
+                          <span className="block text-label-sm text-on-surface-variant mt-xs">
+                            Quando ativo, a janela de transações exibirá as transações conforme estão na fatura em que a parcela vence, e não filtradas apenas pelo mês de compra.
+                          </span>
+                        </div>
+                      </label>
                     </div>
-
-
-
-                  </div>
 
                   <div className="flex justify-end pt-md border-t border-outline-variant/10">
                     <button

@@ -70,7 +70,7 @@ export default function TopNavBar({ userName, userAvatar }: TopNavBarProps) {
     <header className="flex justify-between items-center w-full px-grid-margin py-md bg-surface-container-low border-b border-outline-variant/20 z-40 sticky top-0">
       {/* Mobile Title */}
       <div className="flex items-center gap-sm lg:hidden">
-        <span className="material-symbols-outlined text-headline-md font-black text-primary">credit_card_heart</span>
+        <span className="material-symbols-outlined text-headline-md font-black text-primary">account_balance</span>
         <h2 className="text-headline-md font-headline-md font-black text-primary">MinhaFatura</h2>
       </div>
 

@@ -174,6 +174,16 @@ const getInstallmentPurchaseDate = (tx: Transaction, inst: Installment) => {
   };
 };
 
+const getInstallmentTargetMonthYear = (tx: Transaction, inst: Installment, showByInvoice: boolean) => {
+  if (showByInvoice) {
+    return {
+      month: inst.dueMonth,
+      year: inst.dueYear,
+    };
+  }
+  return getInstallmentPurchaseDate(tx, inst);
+};
+
 interface TransactionsClientProps {
   initialTransactions: Transaction[];
   cards: CardOption[];
@@ -232,6 +242,7 @@ export default function TransactionsClient({
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const [isOpen, setIsOpen] = useState(false); // Modal state
   const [mounted, setMounted] = useState(false);
+  const [showTxByInvoice, setShowTxByInvoice] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
   const [txToEdit, setTxToEdit] = useState<Transaction | null>(null);
@@ -240,6 +251,12 @@ export default function TransactionsClient({
 
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('pref_show_tx_by_invoice');
+      if (stored !== null) {
+        setShowTxByInvoice(stored === 'true');
+      }
+    }
     return () => setMounted(false);
   }, []);
   
@@ -336,7 +353,7 @@ export default function TransactionsClient({
       if (filter) {
         const inst = tx.installments?.find(
           i => {
-            const instPurchase = getInstallmentPurchaseDate(tx, i);
+            const instPurchase = getInstallmentTargetMonthYear(tx, i, showTxByInvoice);
             return instPurchase.month === filter.month && instPurchase.year === filter.year;
           }
         );
@@ -604,7 +621,7 @@ export default function TransactionsClient({
     if (filter && tx.recurrenceType === 'installments') {
       const inst = tx.installments?.find(
         i => {
-          const instPurchase = getInstallmentPurchaseDate(tx, i);
+          const instPurchase = getInstallmentTargetMonthYear(tx, i, showTxByInvoice);
           return instPurchase.month === filter.month && instPurchase.year === filter.year;
         }
       );
@@ -632,7 +649,7 @@ export default function TransactionsClient({
     if (filter && tx.recurrenceType && tx.recurrenceType !== 'none') {
       const inst = tx.installments?.find(
         i => {
-          const instPurchase = getInstallmentPurchaseDate(tx, i);
+          const instPurchase = getInstallmentTargetMonthYear(tx, i, showTxByInvoice);
           return instPurchase.month === filter.month && instPurchase.year === filter.year;
         }
       );
@@ -888,11 +905,11 @@ export default function TransactionsClient({
     const matchesCard = filterCard === 'all' || tx.card.id === filterCard;
     const matchesCategory = filterCategory === 'all' || tx.category.id === filterCategory;
     
-    // Month Filter Logic based on calendar/purchase date (ignoring invoice boundaries)
+    // Month Filter Logic based on calendar/purchase date or invoice reference month
     const filter = getFilterMonthYear(filterMonth);
     const matchesMonth = !filter || (tx.installments && tx.installments.some(
       (inst) => {
-        const instPurchase = getInstallmentPurchaseDate(tx, inst);
+        const instPurchase = getInstallmentTargetMonthYear(tx, inst, showTxByInvoice);
         return instPurchase.month === filter.month && instPurchase.year === filter.year;
       }
     ));
@@ -900,10 +917,10 @@ export default function TransactionsClient({
     const matchesStatus = (() => {
       if (filterStatus === 'all') return true;
       if (filter) {
-        // Find installment for the filtered month based on actual purchase date
+        // Find installment for the filtered month based on selected preference mode
         const inst = tx.installments?.find(
           (i) => {
-            const instPurchase = getInstallmentPurchaseDate(tx, i);
+            const instPurchase = getInstallmentTargetMonthYear(tx, i, showTxByInvoice);
             return instPurchase.month === filter.month && instPurchase.year === filter.year;
           }
         );
@@ -951,7 +968,7 @@ export default function TransactionsClient({
       let text = '';
       const currentInst = tx.installments?.find(
         (inst) => {
-          const instPurchase = getInstallmentPurchaseDate(tx, inst);
+          const instPurchase = getInstallmentTargetMonthYear(tx, inst, showTxByInvoice);
           return instPurchase.month === targetMonth && instPurchase.year === targetYear;
         }
       );
@@ -1118,7 +1135,7 @@ export default function TransactionsClient({
                           if (filter && tx.recurrenceType && tx.recurrenceType !== 'none') {
                             const inst = tx.installments?.find(
                               i => {
-                                const instPurchase = getInstallmentPurchaseDate(tx, i);
+                                const instPurchase = getInstallmentTargetMonthYear(tx, i, showTxByInvoice);
                                 return instPurchase.month === filter.month && instPurchase.year === filter.year;
                               }
                             );
@@ -1179,7 +1196,7 @@ export default function TransactionsClient({
                           if (filter) {
                             const inst = tx.installments?.find(
                               i => {
-                                const instPurchase = getInstallmentPurchaseDate(tx, i);
+                                const instPurchase = getInstallmentTargetMonthYear(tx, i, showTxByInvoice);
                                 return instPurchase.month === filter.month && instPurchase.year === filter.year;
                               }
                             );
@@ -1195,7 +1212,7 @@ export default function TransactionsClient({
                           if (filter) {
                             const inst = tx.installments?.find(
                               i => {
-                                const instPurchase = getInstallmentPurchaseDate(tx, i);
+                                const instPurchase = getInstallmentTargetMonthYear(tx, i, showTxByInvoice);
                                 return instPurchase.month === filter.month && instPurchase.year === filter.year;
                               }
                             );
@@ -1221,7 +1238,7 @@ export default function TransactionsClient({
                           if (filter) {
                             const inst = tx.installments?.find(
                               i => {
-                                const instPurchase = getInstallmentPurchaseDate(tx, i);
+                                const instPurchase = getInstallmentTargetMonthYear(tx, i, showTxByInvoice);
                                 return instPurchase.month === filter.month && instPurchase.year === filter.year;
                               }
                             );
@@ -1303,7 +1320,7 @@ export default function TransactionsClient({
                                 .filter((inst) => {
                                   const filter = getFilterMonthYear(filterMonth);
                                   if (!filter) return true;
-                                  const instPurchase = getInstallmentPurchaseDate(tx, inst);
+                                  const instPurchase = getInstallmentTargetMonthYear(tx, inst, showTxByInvoice);
                                   return instPurchase.month === filter.month && instPurchase.year === filter.year;
                                 })
                                 .sort((a, b) => a.installmentNumber - b.installmentNumber)
