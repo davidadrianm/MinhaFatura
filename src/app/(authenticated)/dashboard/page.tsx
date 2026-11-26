@@ -323,7 +323,7 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
   // Complementar até 100% se necessário
   if (gradientAccumulator < 100 && donutSlices.length > 0) {
     donutSlices.push({
-      color: '#eaddff',
+      color: '#ddd6fe',
       start: gradientAccumulator.toFixed(1),
       end: '100.0',
       percentage: (100 - gradientAccumulator).toFixed(0)
@@ -332,29 +332,32 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
 
   const backgroundGradientStr = donutSlices.length > 0
     ? `conic-gradient(${donutSlices.map(s => `${s.color} ${s.start}% ${s.end}%`).join(', ')})`
-    : 'conic-gradient(#712ae2 0% 100%)';
+    : 'conic-gradient(#7c3aed 0% 100%)';
 
   return (
-    <div className="space-y-lg">
+    <div className="space-y-lg stagger">
       {/* Cards de Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-lg">
         
-        {/* Card 1: Limite Disponível */}
-        <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between h-[136px] hover:-translate-y-0.5 transition-transform duration-300">
+        {/* Card 1: Limite Disponível (destaque) */}
+        <div className="hero-card rounded-[22px] p-md flex flex-col justify-between min-h-[148px] hover:-translate-y-1 transition-transform duration-300">
           <div className="flex justify-between items-start">
-            <span className="text-label-md font-label-md text-on-surface-variant">Limite Disponível</span>
-            <span className="material-symbols-outlined text-tertiary-container opacity-70">money_range</span>
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/75">Limite Disponível</span>
+              <p className="text-[11px] text-white/70 mt-0.5">de R$ {totalLimits.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} no total</p>
+            </div>
+            <span className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center">
+              <span className="material-symbols-outlined icon-fill text-[20px]">account_balance_wallet</span>
+            </span>
           </div>
           <div>
-            <span className="text-display-currency font-display-currency text-on-surface leading-none block mb-1">
-              R$ {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            <span className="text-display-currency font-extrabold tracking-tight leading-none block">
+              <span className="text-headline-sm font-semibold text-white/70 mr-1">R$</span>
+              {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
-            <div className="text-[11px] font-semibold text-on-surface-variant mt-1.5 flex items-center justify-between">
-              <span>Total de Limites: R$ {totalLimits.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="w-full bg-surface-container-high h-1.5 rounded-full mt-2">
+            <div className="w-full bg-white/20 h-2 rounded-full mt-sm">
               <div 
-                className="bg-tertiary-fixed-dim h-1.5 rounded-full transition-all" 
+                className="progress-glow bg-white h-2 rounded-full transition-all duration-700" 
                 style={{ width: `${totalLimits > 0 ? (availableLimit / totalLimits) * 100 : 0}%` }}
               />
             </div>
@@ -362,21 +365,27 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
         </div>
 
         {/* Card 2: Limite Utilizado */}
-        <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between h-[136px] hover:-translate-y-0.5 transition-transform duration-300">
+        <div className="bg-surface-container-lowest rounded-[22px] p-md shadow-card border border-outline-variant/30 flex flex-col justify-between min-h-[148px] hover:-translate-y-1 duration-300">
           <div className="flex justify-between items-start">
-            <span className="text-label-md font-label-md text-on-surface-variant">Total Utilizado</span>
-            <span className="material-symbols-outlined text-on-primary-container opacity-70">reorder</span>
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-on-surface-variant">Total Utilizado</span>
+              <p className="text-[11px] text-on-surface-variant mt-0.5">
+                Comprometimento de{' '}
+                <span className="font-bold text-on-surface">{totalLimits > 0 ? ((totalLimitUsed / totalLimits) * 100).toFixed(1) : 0}%</span>
+              </p>
+            </div>
+            <span className="icon-chip text-rose-500!" style={{ background: 'color-mix(in srgb, #f43f5e 14%, transparent)' }}>
+              <span className="material-symbols-outlined icon-fill">trending_up</span>
+            </span>
           </div>
           <div>
-            <span className="text-display-currency font-display-currency text-on-surface leading-none block mb-1">
-              R$ {totalLimitUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            <span className="text-display-currency font-extrabold tracking-tight text-on-surface leading-none block">
+              <span className="text-headline-sm font-semibold text-on-surface-variant mr-1">R$</span>
+              {totalLimitUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
-            <div className="text-[11px] font-semibold text-on-surface-variant mt-1.5 flex items-center justify-between">
-              <span>Comprometimento: {totalLimits > 0 ? ((totalLimitUsed / totalLimits) * 100).toFixed(1) : 0}%</span>
-            </div>
-            <div className="w-full bg-surface-container-high h-1.5 rounded-full mt-2">
+            <div className="w-full bg-surface-container-high h-2 rounded-full mt-sm">
               <div 
-                className="bg-rose-500 h-1.5 rounded-full transition-all" 
+                className="progress-glow h-2 rounded-full transition-all duration-700 bg-gradient-to-r from-amber-400 via-rose-500 to-fuchsia-600" 
                 style={{ width: `${totalLimits > 0 ? (totalLimitUsed / totalLimits) * 100 : 0}%` }}
               />
             </div>
@@ -384,21 +393,25 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
         </div>
 
         {/* Card 3: Gastos Compartilhados / A Receber */}
-        <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between h-[136px] hover:-translate-y-0.5 transition-transform duration-300">
+        <div className="bg-surface-container-lowest rounded-[22px] p-md shadow-card border border-outline-variant/30 flex flex-col justify-between min-h-[148px] hover:-translate-y-1 duration-300">
           <div className="flex justify-between items-start">
-            <span className="text-label-md font-label-md text-on-surface-variant">A Receber (Compartilhado)</span>
-            <span className="material-symbols-outlined text-secondary opacity-70">group</span>
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-on-surface-variant">A Receber</span>
+              <p className="text-[11px] text-on-surface-variant mt-0.5">Gastos compartilhados pendentes</p>
+            </div>
+            <span className="icon-chip text-emerald-600! dark:text-emerald-300!" style={{ background: 'color-mix(in srgb, #10b981 15%, transparent)' }}>
+              <span className="material-symbols-outlined icon-fill">group</span>
+            </span>
           </div>
           <div>
-            <span className="text-display-currency font-display-currency text-on-surface leading-none block mb-1">
-              R$ {totalPendingDebtors.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            <span className="text-display-currency font-extrabold tracking-tight text-on-surface leading-none block">
+              <span className="text-headline-sm font-semibold text-on-surface-variant mr-1">R$</span>
+              {totalPendingDebtors.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
-            <div className="text-[11px] font-semibold text-on-surface-variant mt-1.5 flex items-center justify-between">
-              <span>Total pendente geral</span>
-            </div>
-            <div className="w-full bg-surface-container-high h-1.5 rounded-full mt-2 opacity-0">
-              <div className="h-1.5 rounded-full" />
-            </div>
+            <Link href="/debtors" className="inline-flex items-center gap-1 mt-sm text-[11px] font-bold text-secondary hover:gap-2 transition-all">
+              Ver quem deve
+              <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+            </Link>
           </div>
         </div>
 
@@ -408,13 +421,13 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
         
         {/* Bloco: Fatura Atual por Cartão */}
-        <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col h-[288px]">
+        <div className="bg-surface-container-lowest rounded-[22px] p-md shadow-card border border-outline-variant/30 flex flex-col h-[288px]">
           <div className="flex justify-between items-center mb-sm">
-            <h3 className="text-body-md font-body-md font-semibold text-on-surface flex items-center gap-xs">
-              <span className="material-symbols-outlined text-secondary opacity-70">credit_card</span>
+            <h3 className="text-body-md font-bold text-on-surface flex items-center gap-sm">
+              <span className="icon-chip w-8! h-8!"><span className="material-symbols-outlined icon-fill">credit_card</span></span>
               Fatura Atual
             </h3>
-            <Link href="/invoices" className="text-label-sm font-label-sm text-secondary hover:underline font-semibold">
+            <Link href="/invoices" className="text-label-sm font-bold text-secondary bg-secondary/10 hover:bg-secondary/20 px-sm py-1 rounded-full transition-colors">
               Ver faturas
             </Link>
           </div>
@@ -516,13 +529,13 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
         </div>
 
         {/* Bloco: Próximas Faturas (antigo Faturas do Mês) */}
-        <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col h-[288px]">
+        <div className="bg-surface-container-lowest rounded-[22px] p-md shadow-card border border-outline-variant/30 flex flex-col h-[288px]">
           <div className="flex justify-between items-center mb-sm">
-            <h3 className="text-body-md font-body-md font-semibold text-on-surface flex items-center gap-xs">
-              <span className="material-symbols-outlined text-secondary opacity-70">calendar_month</span>
+            <h3 className="text-body-md font-bold text-on-surface flex items-center gap-sm">
+              <span className="icon-chip w-8! h-8!"><span className="material-symbols-outlined icon-fill">calendar_month</span></span>
               Próximas Faturas
             </h3>
-            <Link href="/invoices" className="text-label-sm font-label-sm text-secondary hover:underline font-semibold">
+            <Link href="/invoices" className="text-label-sm font-bold text-secondary bg-secondary/10 hover:bg-secondary/20 px-sm py-1 rounded-full transition-colors">
               Ver faturas
             </Link>
           </div>
@@ -625,7 +638,7 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
 
       {/* Alertas de Vencimento */}
       {activeAlertInvoices.length > 0 && (
-        <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] space-y-sm">
+        <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-[22px] p-md shadow-card space-y-sm">
           <h3 className="text-body-lg font-body-lg font-bold text-on-surface flex items-center gap-xs">
             <span className="material-symbols-outlined text-error">warning</span>
             Atenção aos Vencimentos
@@ -672,10 +685,10 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
         
         {/* Main Chart Area */}
-        <div className="lg:col-span-2 bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between">
+        <div className="lg:col-span-2 bg-surface-container-lowest rounded-[22px] p-md shadow-card border border-outline-variant/30 flex flex-col justify-between">
           <div className="flex justify-between items-center mb-md">
-            <h3 className="text-body-lg font-body-lg font-semibold text-on-surface">Evolução Mensal</h3>
-            <Link href="/transactions" className="text-label-md font-label-md text-secondary hover:underline">
+            <h3 className="text-body-lg font-bold text-on-surface flex items-center gap-sm"><span className="icon-chip w-8! h-8!"><span className="material-symbols-outlined icon-fill">bar_chart</span></span>Evolução Mensal</h3>
+            <Link href="/transactions" className="text-label-sm font-bold text-secondary bg-secondary/10 hover:bg-secondary/20 px-sm py-1 rounded-full transition-colors">
               Ver lançamentos
             </Link>
           </div>
@@ -704,8 +717,8 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
                 return (
                   <div 
                     key={d.label} 
-                    className={`flex-1 mx-1 rounded-t-md relative group transition-all duration-500 cursor-default ${
-                      isCurrentMonth ? 'bg-primary-container' : 'bg-secondary/80'
+                    className={`flex-1 mx-1.5 rounded-t-xl relative group transition-all duration-500 cursor-default hover:brightness-110 hover:-translate-y-0.5 ${
+                      isCurrentMonth ? 'bar-brand-current' : 'bar-brand opacity-80 hover:opacity-100'
                     }`}
                     style={{ height: `${Math.max(heightPercent, 6)}%` }}
                   >
@@ -725,18 +738,18 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
         </div>
 
         {/* Donut Chart & Categories */}
-        <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col">
-          <h3 className="text-body-lg font-body-lg font-semibold text-on-surface mb-md">Gasto por Categoria</h3>
+        <div className="bg-surface-container-lowest rounded-[22px] p-md shadow-card border border-outline-variant/30 flex flex-col">
+          <h3 className="text-body-lg font-bold text-on-surface mb-md flex items-center gap-sm"><span className="icon-chip w-8! h-8!"><span className="material-symbols-outlined icon-fill">donut_large</span></span>Gasto por Categoria</h3>
           
           <div className="flex-1 flex flex-col items-center justify-center py-sm">
             {/* CSS Donut Chart */}
             <div 
-              className="relative w-40 h-40 rounded-full flex items-center justify-center shadow-inner transition-all" 
+              className="relative w-44 h-44 rounded-full flex items-center justify-center transition-all shadow-[0_12px_40px_-12px_rgba(124,58,237,0.45)] hover:scale-[1.03] duration-500" 
               style={{ background: backgroundGradientStr }}
             >
-              <div className="w-28 h-28 bg-surface-container-lowest rounded-full flex items-center justify-center flex-col shadow-[0_0_10px_rgba(0,0,0,0.05)_inset]">
+              <div className="w-32 h-32 bg-surface-container-lowest rounded-full flex items-center justify-center flex-col shadow-[0_0_14px_rgba(0,0,0,0.08)_inset]">
                 <span className="text-label-sm text-on-surface-variant font-medium">Total do Mês</span>
-                <span className="text-body-lg font-semibold text-on-surface">
+                <span className="text-body-lg font-extrabold tracking-tight text-on-surface">
                   R$ {currentMonthSpent.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
                 </span>
               </div>
@@ -767,17 +780,17 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
       </div>
 
       {/* Recent Transactions List */}
-      <div className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 overflow-hidden">
-        <div className="p-md border-b border-outline-variant/20 flex justify-between items-center bg-surface-bright">
-          <h3 className="text-body-lg font-body-lg font-semibold text-on-surface">Últimas Transações</h3>
-          <Link href="/transactions" className="text-label-md font-label-md text-secondary hover:underline">
+      <div className="bg-surface-container-lowest rounded-[22px] shadow-card border border-outline-variant/30 overflow-hidden">
+        <div className="p-md border-b border-outline-variant/20 flex justify-between items-center">
+          <h3 className="text-body-lg font-bold text-on-surface flex items-center gap-sm"><span className="icon-chip w-8! h-8!"><span className="material-symbols-outlined icon-fill">receipt_long</span></span>Últimas Transações</h3>
+          <Link href="/transactions" className="text-label-sm font-bold text-secondary bg-secondary/10 hover:bg-secondary/20 px-sm py-1 rounded-full transition-colors">
             Ver todas
           </Link>
         </div>
         
         <ul className="flex flex-col divide-y divide-outline-variant/20">
           {recentTransactions.map((tx) => (
-            <li key={tx.id} className="p-md flex items-center justify-between hover:bg-surface-container-low/40 transition-colors">
+            <li key={tx.id} className="p-md flex items-center justify-between hover:bg-secondary/5 transition-colors">
               <div className="flex items-center gap-md min-w-0">
                 <div 
                   className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"

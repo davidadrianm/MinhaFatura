@@ -395,7 +395,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
               return (
                 <div 
                   key={card.id} 
-                  className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30 flex flex-col gap-md hover:-translate-y-[2px] transition-transform duration-300"
+                  className="bg-surface-container-lowest rounded-xl p-md shadow-card border border-outline-variant/30 flex flex-col gap-md hover:-translate-y-[2px] transition-transform duration-300"
                 >
                   {/* Physical Card Representation */}
                   <div className={`${cardTheme.textColorClass} rounded-[16px] p-md aspect-[1.58] flex flex-col justify-between relative overflow-hidden shadow-sm`} style={cardTheme.bgStyle}>
@@ -512,7 +512,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
         </h3>
 
         {/* Realtime visual preview */}
-        <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col gap-sm">
+        <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-card flex flex-col gap-sm">
           <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider text-center">Visualização do Cartão</p>
           
           {(() => {
@@ -546,7 +546,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
         </div>
 
         {/* Form Container */}
-        <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
+        <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-card">
           {error && (
             <div className="mb-4 bg-error-container text-on-error-container text-xs px-4 py-3 rounded-lg border border-error/10 flex items-center gap-xs">
               <span className="material-symbols-outlined text-base">error</span>

@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -7,6 +7,19 @@ const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
 });
+
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+});
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f5fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#07081a" },
+  ],
+};
 
 export const metadata: Metadata = {
   title: "MinhaFatura - Seu melhor gestor de cartão.",
@@ -27,7 +40,7 @@ export default async function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${inter.variable} h-full antialiased ${isDark ? 'dark' : ''}`}
+      className={`${inter.variable} ${jakarta.variable} h-full antialiased ${isDark ? 'dark' : ''}`}
       suppressHydrationWarning
     >
       <head>

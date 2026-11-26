@@ -86,7 +86,7 @@ function ResetPasswordForm() {
   }
 
   return (
-    <div className="w-full max-w-md relative z-10 bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-8 space-y-6 shadow-[0_4px_30px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_30px_rgba(113,42,226,0.04)] transition-shadow animate-fade-in">
+    <div className="w-full max-w-md relative z-10 glass rounded-[28px] p-8 space-y-6 shadow-card animate-fade-in">
       {/* Header Logo */}
       <div className="flex flex-col items-center text-center space-y-2">
         <div className="w-12 h-12 rounded-full bg-secondary-fixed/50 border border-secondary-fixed-dim flex items-center justify-center text-secondary">
@@ -151,7 +151,7 @@ function ResetPasswordForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 px-4 bg-secondary text-on-secondary disabled:opacity-50 rounded-lg text-label-md font-label-md hover:opacity-90 active:scale-95 transition-all shadow-sm flex items-center justify-center gap-xs cursor-pointer mt-6"
+            className="w-full py-3 px-4 btn-brand disabled:opacity-50 rounded-xl text-label-md font-semibold active:scale-95 flex items-center justify-center gap-xs cursor-pointer mt-6"
           >
             {loading ? (
               <span className="material-symbols-outlined animate-spin">progress_activity</span>
@@ -186,13 +186,15 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="min-h-screen relative flex items-center justify-center bg-background px-4 overflow-hidden">
+    <div className="min-h-screen relative flex items-center justify-center px-4 overflow-hidden">
+      <div className="aurora-bg" aria-hidden="true"><span /></div>
+      <div className="aurora-grid" aria-hidden="true" />
       {/* Background Decorative blobs */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-secondary/5 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-secondary-fixed-dim/10 rounded-full blur-[100px] pointer-events-none" />
 
       <Suspense fallback={
-        <div className="flex flex-col items-center justify-center space-y-4 relative z-10 bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-8 shadow-[0_4px_30px_rgba(0,0,0,0.03)] w-full max-w-md">
+        <div className="flex flex-col items-center justify-center space-y-4 relative z-10 bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-8 shadow-card w-full max-w-md">
           <span className="material-symbols-outlined animate-spin text-secondary text-4xl">progress_activity</span>
           <p className="text-body-md text-on-surface-variant font-medium">Carregando...</p>
         </div>

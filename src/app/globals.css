@@ -1,9 +1,7 @@
 @import "tailwindcss";
 
-/* Disable OS-based dark mode — this app is always light.
-   dark: classes only activate with an explicit .dark parent class,
-   which this app never sets. Prevents the OS dark mode from
-   activating dark: variants in the sidebar, topnav, etc. */
+/* dark: variants só ativam com a classe .dark explícita no <html>
+   (definida pelo cookie de tema em layout.tsx). */
 @variant dark (&:where(.dark, .dark *));
 
 /* =====================================================
@@ -13,146 +11,174 @@
    para classes Tailwind v4 via @theme.
    ===================================================== */
 
+/* =====================================================
+   AURORA — Redesign visual MinhaFatura
+   Violeta elétrico + índigo + ciano, superfícies limpas,
+   fundo com "aurora" suave e cartões com brilho sutil.
+   ===================================================== */
 :root {
   /* --- Surface Scale --- */
-  --background: #f7f9fb;
-  --foreground: #191c1e;
-  --on-background: #191c1e;
+  --background: #f4f5fb;
+  --foreground: #14152b;
+  --on-background: #14152b;
 
-  --surface: #f7f9fb;
-  --surface-dim: #d8dadc;
-  --surface-bright: #f7f9fb;
+  --surface: #f4f5fb;
+  --surface-dim: #d9dbea;
+  --surface-bright: #fbfbff;
   --surface-container-lowest: #ffffff;
-  --surface-container-low: #f2f4f6;
-  --surface-container: #eceef0;
-  --surface-container-high: #e6e8ea;
-  --surface-container-highest: #e0e3e5;
-  --surface-variant: #e0e3e5;
+  --surface-container-low: #f0f1f9;
+  --surface-container: #e9eaf5;
+  --surface-container-high: #e3e4f1;
+  --surface-container-highest: #dcdeed;
+  --surface-variant: #dcdeed;
 
   /* --- On-Surface --- */
-  --on-surface: #191c1e;
-  --on-surface-variant: #45464d;
-  --inverse-surface: #2d3133;
-  --inverse-on-surface: #eff1f3;
+  --on-surface: #14152b;
+  --on-surface-variant: #545775;
+  --inverse-surface: #1c1d36;
+  --inverse-on-surface: #f0f1fb;
 
   /* --- Outline --- */
-  --outline: #76777d;
-  --outline-variant: #c6c6cd;
-  --surface-tint: #565e74;
+  --outline: #7a7d9c;
+  --outline-variant: #c9cbe0;
+  --surface-tint: #5b5fc7;
 
-  /* --- Primary (Navy/Black) --- */
-  --primary: #000000;
+  /* --- Primary (Midnight Indigo) --- */
+  --primary: #14152b;
   --on-primary: #ffffff;
-  --primary-container: #131b2e;
-  --on-primary-container: #7c839b;
-  --inverse-primary: #bec6e0;
+  --primary-container: #1e1b4b;
+  --on-primary-container: #8b8fd8;
+  --inverse-primary: #c7c9ff;
 
-  /* --- Secondary (Purple) --- */
-  --secondary: #712ae2;
+  /* --- Secondary (Electric Violet — cor da marca) --- */
+  --secondary: #7c3aed;
   --on-secondary: #ffffff;
-  --secondary-container: #8a4cfc;
-  --on-secondary-container: #fffbff;
+  --secondary-container: #8b5cf6;
+  --on-secondary-container: #ffffff;
 
-  /* --- Tertiary (Green) --- */
-  --tertiary: #000000;
+  /* --- Tertiary (Emerald) --- */
+  --tertiary: #047857;
   --on-tertiary: #ffffff;
-  --tertiary-container: #002113;
-  --on-tertiary-container: #009668;
+  --tertiary-container: #022c22;
+  --on-tertiary-container: #059669;
 
   /* --- Error --- */
-  --error: #ba1a1a;
+  --error: #e11d48;
   --on-error: #ffffff;
-  --error-container: #ffdad6;
-  --on-error-container: #93000a;
+  --error-container: #ffe4e9;
+  --on-error-container: #9f1239;
 
   /* --- Fixed Variants --- */
-  --primary-fixed: #dae2fd;
-  --primary-fixed-dim: #bec6e0;
-  --on-primary-fixed: #131b2e;
-  --on-primary-fixed-variant: #3f465c;
+  --primary-fixed: #e0e1ff;
+  --primary-fixed-dim: #c7c9ff;
+  --on-primary-fixed: #1e1b4b;
+  --on-primary-fixed-variant: #3730a3;
 
-  --secondary-fixed: #eaddff;
-  --secondary-fixed-dim: #d2bbff;
-  --on-secondary-fixed: #25005a;
-  --on-secondary-fixed-variant: #5a00c6;
+  --secondary-fixed: #ede4ff;
+  --secondary-fixed-dim: #d6c3ff;
+  --on-secondary-fixed: #2e1065;
+  --on-secondary-fixed-variant: #6d28d9;
 
-  --tertiary-fixed: #6ffbbe;
-  --tertiary-fixed-dim: #4edea3;
-  --on-tertiary-fixed: #002113;
-  --on-tertiary-fixed-variant: #005236;
+  --tertiary-fixed: #a7f3d0;
+  --tertiary-fixed-dim: #34d399;
+  --on-tertiary-fixed: #022c22;
+  --on-tertiary-fixed-variant: #065f46;
+
+  /* --- Aurora (extras do redesign) --- */
+  --brand-1: #7c3aed;
+  --brand-2: #4f46e5;
+  --brand-3: #06b6d4;
+  --brand-gradient: linear-gradient(135deg, #7c3aed 0%, #4f46e5 55%, #0ea5e9 100%);
+  --aurora-a: rgba(124, 58, 237, 0.16);
+  --aurora-b: rgba(6, 182, 212, 0.13);
+  --aurora-c: rgba(236, 72, 153, 0.09);
+  --card-shadow: 0 1px 2px rgba(20, 21, 43, 0.04), 0 8px 24px -6px rgba(79, 70, 229, 0.10);
+  --card-shadow-hover: 0 2px 4px rgba(20, 21, 43, 0.05), 0 18px 40px -10px rgba(124, 58, 237, 0.22);
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(124, 58, 237, 0.10);
 }
 
 /* =====================================================
-   DARK MODE DESIGN TOKENS — MinhaFatura Dark Theme
+   DARK MODE — Aurora Night
    ===================================================== */
 .dark {
   color-scheme: dark;
   /* --- Surface Scale --- */
-  --background: #0d0f12;
-  --foreground: #e2e3e5;
-  --on-background: #e2e3e5;
+  --background: #07081a;
+  --foreground: #e7e8f7;
+  --on-background: #e7e8f7;
 
-  --surface: #0d0f12;
-  --surface-dim: #0b0c0e;
-  --surface-bright: #1a1d22;
-  --surface-container-lowest: #12151a;
-  --surface-container-low: #161a22;
-  --surface-container: #1c212c;
-  --surface-container-high: #242c3b;
-  --surface-container-highest: #2c3649;
-  --surface-variant: #3f4755;
+  --surface: #07081a;
+  --surface-dim: #05060f;
+  --surface-bright: #161837;
+  --surface-container-lowest: #0e1027;
+  --surface-container-low: #12142e;
+  --surface-container: #181b3a;
+  --surface-container-high: #202447;
+  --surface-container-highest: #2a2e56;
+  --surface-variant: #343963;
 
   /* --- On-Surface --- */
-  --on-surface: #e2e3e5;
-  --on-surface-variant: #b5bac7;
-  --inverse-surface: #e2e2e4;
-  --inverse-on-surface: #1a1c1e;
+  --on-surface: #e7e8f7;
+  --on-surface-variant: #a9acd0;
+  --inverse-surface: #e7e8f7;
+  --inverse-on-surface: #14152b;
 
   /* --- Outline --- */
-  --outline: #8d919f;
-  --outline-variant: #434752;
-  --surface-tint: #a8b2c6;
+  --outline: #8487b0;
+  --outline-variant: #353a66;
+  --surface-tint: #a5a8ff;
 
-  /* --- Primary (White/Light Blue) --- */
+  /* --- Primary --- */
   --primary: #ffffff;
-  --on-primary: #131b2e;
-  --primary-container: #1e2a4a;
-  --on-primary-container: #dae2fd;
-  --inverse-primary: #000000;
+  --on-primary: #14152b;
+  --primary-container: #2a2670;
+  --on-primary-container: #c7c9ff;
+  --inverse-primary: #14152b;
 
-  /* --- Secondary (Vibrant Purple) --- */
-  --secondary: #a87ffc;
-  --on-secondary: #380085;
-  --secondary-container: #5300c6;
-  --on-secondary-container: #eaddff;
+  /* --- Secondary (Electric Violet) --- */
+  --secondary: #a78bfa;
+  --on-secondary: #1e0b4b;
+  --secondary-container: #6d28d9;
+  --on-secondary-container: #ede4ff;
 
-  /* --- Tertiary (Green) --- */
-  --tertiary: #6ffbbe;
-  --on-tertiary: #002113;
-  --tertiary-container: #005236;
-  --on-tertiary-container: #becaf2;
+  /* --- Tertiary (Emerald) --- */
+  --tertiary: #6ee7b7;
+  --on-tertiary: #022c22;
+  --tertiary-container: #065f46;
+  --on-tertiary-container: #6ee7b7;
 
   /* --- Error --- */
-  --error: #ffb4ab;
-  --on-error: #690005;
-  --error-container: #93000a;
-  --on-error-container: #ffdad6;
+  --error: #fb7185;
+  --on-error: #4c0519;
+  --error-container: #881337;
+  --on-error-container: #ffe4e9;
 
   /* --- Fixed Variants --- */
-  --primary-fixed: #1e2a4a;
-  --primary-fixed-dim: #131b2e;
-  --on-primary-fixed: #dae2fd;
-  --on-primary-fixed-variant: #bec6e0;
+  --primary-fixed: #2a2670;
+  --primary-fixed-dim: #1e1b4b;
+  --on-primary-fixed: #e0e1ff;
+  --on-primary-fixed-variant: #c7c9ff;
 
-  --secondary-fixed: #380085;
-  --secondary-fixed-dim: #25005a;
-  --on-secondary-fixed: #eaddff;
-  --on-secondary-fixed-variant: #d2bbff;
+  --secondary-fixed: #2e1065;
+  --secondary-fixed-dim: #1e0b4b;
+  --on-secondary-fixed: #ede4ff;
+  --on-secondary-fixed-variant: #d6c3ff;
 
-  --tertiary-fixed: #005236;
-  --tertiary-fixed-dim: #002113;
-  --on-tertiary-fixed: #6ffbbe;
-  --on-tertiary-fixed-variant: #4edea3;
+  --tertiary-fixed: #065f46;
+  --tertiary-fixed-dim: #022c22;
+  --on-tertiary-fixed: #a7f3d0;
+  --on-tertiary-fixed-variant: #6ee7b7;
+
+  /* --- Aurora --- */
+  --brand-gradient: linear-gradient(135deg, #8b5cf6 0%, #6366f1 55%, #22d3ee 100%);
+  --aurora-a: rgba(139, 92, 246, 0.22);
+  --aurora-b: rgba(34, 211, 238, 0.12);
+  --aurora-c: rgba(236, 72, 153, 0.10);
+  --card-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+  --card-shadow-hover: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 20px 44px -12px rgba(139, 92, 246, 0.35);
+  --glass-bg: rgba(14, 16, 39, 0.70);
+  --glass-border: rgba(167, 139, 250, 0.14);
 }
 
 /* =====================================================
@@ -221,7 +247,12 @@
   --color-on-tertiary-fixed-variant: var(--on-tertiary-fixed-variant);
 
   /* --- Font Family --- */
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-jakarta), 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* --- Shadows (Aurora) --- */
+  --shadow-card: var(--card-shadow);
+  --shadow-card-hover: var(--card-shadow-hover);
+  --shadow-glow: 0 10px 30px -8px rgba(124, 58, 237, 0.55);
 
   /* =====================================================
      SPACING SCALE (8px base)
@@ -350,7 +381,7 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-jakarta), 'Inter', ui-sans-serif, system-ui, sans-serif;
   overflow-x: hidden;
   font-feature-settings: "tnum"; /* tabular nums para valores financeiros */
 }
@@ -399,9 +430,10 @@ input, select, textarea, button {
    GLASSMORPHISM
    ===================================================== */
 .glass {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(25, 28, 30, 0.08);
+  background: var(--glass-bg);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid var(--glass-border);
 }
 
 .glass-glow {
@@ -451,4 +483,247 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 input[type="date"]::-webkit-calendar-picker-indicator:hover {
   background-color: var(--surface-variant);
+}
+
+/* =====================================================
+   AURORA — fundo animado, gradientes da marca e cards
+   ===================================================== */
+
+/* Camada de fundo fixa com "aurora" (fica atrás de tudo) */
+.aurora-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.aurora-bg::before,
+.aurora-bg::after {
+  content: "";
+  position: absolute;
+  width: 60vmax;
+  height: 60vmax;
+  border-radius: 9999px;
+  filter: blur(80px);
+  will-change: transform;
+}
+
+.aurora-bg::before {
+  top: -25vmax;
+  right: -15vmax;
+  background: radial-gradient(circle, var(--aurora-a) 0%, transparent 65%);
+  animation: auroraDrift 22s ease-in-out infinite alternate;
+}
+
+.aurora-bg::after {
+  bottom: -30vmax;
+  left: -10vmax;
+  background: radial-gradient(circle, var(--aurora-b) 0%, transparent 65%);
+  animation: auroraDrift 28s ease-in-out infinite alternate-reverse;
+}
+
+.aurora-bg > span {
+  position: absolute;
+  top: 35%;
+  left: 40%;
+  width: 40vmax;
+  height: 40vmax;
+  border-radius: 9999px;
+  filter: blur(90px);
+  background: radial-gradient(circle, var(--aurora-c) 0%, transparent 65%);
+  animation: auroraDrift 34s ease-in-out infinite alternate;
+}
+
+/* Grade pontilhada bem sutil por cima da aurora */
+.aurora-grid {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(var(--outline-variant) 1px, transparent 1px);
+  background-size: 22px 22px;
+  opacity: 0.35;
+  mask-image: linear-gradient(to bottom, black 0%, transparent 70%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 70%);
+}
+
+@keyframes auroraDrift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(-6vmax, 4vmax, 0) scale(1.08); }
+  100% { transform: translate3d(4vmax, -3vmax, 0) scale(0.95); }
+}
+
+/* Gradiente da marca */
+.bg-brand-gradient {
+  background: var(--brand-gradient);
+}
+
+.text-brand-gradient {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Botão principal com brilho */
+.btn-brand {
+  position: relative;
+  background: var(--brand-gradient);
+  color: #ffffff;
+  box-shadow: 0 8px 22px -8px rgba(124, 58, 237, 0.65);
+  transition: transform 0.2s ease, box-shadow 0.25s ease, filter 0.2s ease;
+  overflow: hidden;
+}
+
+.btn-brand::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.35) 50%, transparent 80%);
+  transform: translateX(-120%);
+  transition: transform 0.6s ease;
+}
+
+.btn-brand:hover {
+  box-shadow: 0 12px 28px -8px rgba(124, 58, 237, 0.8);
+  filter: brightness(1.05);
+}
+
+.btn-brand:hover::after {
+  transform: translateX(120%);
+}
+
+/* Cards: borda luminosa sutil + elevação no hover */
+.shadow-card {
+  transition: box-shadow 0.3s ease, transform 0.3s ease, border-color 0.3s ease;
+}
+
+.shadow-card:hover {
+  box-shadow: var(--card-shadow-hover);
+}
+
+/* Cartão destaque (hero) com gradiente da marca */
+.hero-card {
+  position: relative;
+  background: var(--brand-gradient);
+  color: #ffffff;
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow: 0 18px 40px -14px rgba(79, 70, 229, 0.6);
+}
+
+.hero-card::before {
+  content: "";
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  right: -70px;
+  top: -90px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.35), transparent 70%);
+  z-index: -1;
+}
+
+.hero-card::after {
+  content: "";
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  left: -60px;
+  bottom: -110px;
+  border-radius: 9999px;
+  border: 28px solid rgba(255, 255, 255, 0.08);
+  z-index: -1;
+}
+
+/* Chip de ícone com gradiente suave */
+.icon-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--secondary) 18%, transparent), color-mix(in srgb, var(--brand-3, #06b6d4) 12%, transparent));
+  color: var(--secondary);
+}
+
+.icon-chip .material-symbols-outlined {
+  font-size: 1.25rem;
+}
+
+/* Barras do gráfico com gradiente */
+.bar-brand {
+  background: linear-gradient(180deg, var(--secondary-container) 0%, color-mix(in srgb, var(--secondary) 55%, transparent) 100%);
+}
+
+.bar-brand-current {
+  background: var(--brand-gradient);
+  box-shadow: 0 8px 20px -6px rgba(79, 70, 229, 0.6);
+}
+
+/* Barra de progresso com brilho */
+.progress-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: translateX(-100%);
+  animation: progressShine 2.8s ease-in-out infinite;
+}
+
+@keyframes progressShine {
+  0%   { transform: translateX(-100%); }
+  60%, 100% { transform: translateX(100%); }
+}
+
+/* Entrada em cascata dos blocos da página */
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.stagger > * {
+  animation: riseIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.stagger > *:nth-child(2) { animation-delay: 0.08s; }
+.stagger > *:nth-child(3) { animation-delay: 0.14s; }
+.stagger > *:nth-child(4) { animation-delay: 0.20s; }
+.stagger > *:nth-child(5) { animation-delay: 0.26s; }
+.stagger > *:nth-child(6) { animation-delay: 0.32s; }
+
+/* Item ativo da navegação */
+.nav-active {
+  background: var(--brand-gradient);
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px -10px rgba(124, 58, 237, 0.7);
+}
+
+/* Respeita quem prefere menos movimento */
+@media (prefers-reduced-motion: reduce) {
+  .aurora-bg::before,
+  .aurora-bg::after,
+  .aurora-bg > span,
+  .progress-glow::after,
+  .stagger > *,
+  .animate-fade-in {
+    animation: none !important;
+  }
+}
+
+/* Aceno da saudação */
+@keyframes wave {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  10%, 30% { transform: rotate(14deg); }
+  20% { transform: rotate(-8deg); }
+  40% { transform: rotate(-4deg); }
+  50% { transform: rotate(10deg); }
 }

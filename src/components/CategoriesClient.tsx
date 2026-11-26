@@ -184,7 +184,7 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
           {categories.map((cat) => (
             <div 
               key={cat.id} 
-              className="bg-surface-container-lowest border border-outline-variant/30 p-sm rounded-xl flex items-center justify-between shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:border-outline-variant/80 hover:shadow-sm transition-all"
+              className="bg-surface-container-lowest border border-outline-variant/30 p-sm rounded-xl flex items-center justify-between shadow-card hover:border-outline-variant/80 hover:shadow-sm transition-all"
             >
               <div className="flex items-center gap-md min-w-0">
                 <div 
@@ -236,7 +236,7 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
           {editingCategory ? `Editar Categoria: ${editingCategory.name}` : 'Criar Nova Categoria'}
         </h3>
 
-        <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
+        <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-card">
           {error && (
             <div className="mb-4 bg-error-container text-on-error-container text-xs px-4 py-3 rounded-lg border border-error/10 flex items-center gap-xs">
               <span className="material-symbols-outlined text-base">error</span>

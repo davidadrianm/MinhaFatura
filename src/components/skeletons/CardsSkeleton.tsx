@@ -18,7 +18,7 @@ export default function CardsSkeleton() {
             {[1, 2].map((i) => (
               <div 
                 key={i} 
-                className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col gap-md"
+                className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-card flex flex-col gap-md"
               >
                 {/* Physical Card Simulation */}
                 <div className="bg-surface-container-high rounded-[16px] p-md aspect-[1.58] flex flex-col justify-between">
@@ -72,7 +72,7 @@ export default function CardsSkeleton() {
         <div className="space-y-md">
           <div className="h-6 w-48 bg-surface-container-highest rounded" />
           
-          <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col gap-md">
+          <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-card flex flex-col gap-md">
             <div className="h-4 w-32 bg-surface-container-high rounded mx-auto" />
             <div className="bg-surface-container rounded-[16px] aspect-[1.58] w-full" />
             

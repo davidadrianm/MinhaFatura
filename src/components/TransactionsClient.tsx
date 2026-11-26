@@ -941,7 +941,7 @@ export default function TransactionsClient({
       </div>
 
       {/* Filters Bar Card */}
-      <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md flex flex-wrap lg:flex-nowrap gap-md items-end shadow-[0_4px_20px_rgba(0,0,0,0.03)] w-full mb-md select-none">
+      <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md flex flex-wrap lg:flex-nowrap gap-md items-end shadow-card w-full mb-md select-none">
         {/* Pesquisar column */}
         <div className="flex-1 min-w-[180px]">
           <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Pesquisar</label>
@@ -1045,7 +1045,7 @@ export default function TransactionsClient({
       </div>
 
       {/* Transactions Table */}
-      <div className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30 overflow-hidden">
+      <div className="bg-surface-container-lowest rounded-xl shadow-card border border-outline-variant/30 overflow-hidden">
         <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-surface-container-high bg-surface-container-low text-label-sm font-label-sm text-on-surface-variant select-none">

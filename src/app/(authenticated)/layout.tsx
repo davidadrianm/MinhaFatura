@@ -30,7 +30,11 @@ export default async function AuthenticatedLayout({
 
   return (
     <DialogProvider>
-      <div className="flex h-screen overflow-hidden bg-background text-on-background font-sans">
+      {/* Fundo Aurora (fixo, atrás de todo o conteúdo) */}
+      <div className="aurora-bg" aria-hidden="true"><span /></div>
+      <div className="aurora-grid" aria-hidden="true" />
+
+      <div className="relative z-10 flex h-screen overflow-hidden text-on-background font-sans">
         {/* Sidebar de Navegação (Desktop Only) */}
         <Sidebar userName={user.name} userEmail={user.email} userAvatar={user.avatarUrl} />
 
@@ -40,7 +44,7 @@ export default async function AuthenticatedLayout({
           <TopNavBar userName={user.name} userAvatar={user.avatarUrl} />
 
           {/* Scrollable Canvas */}
-          <main className="flex-1 overflow-y-auto p-grid-margin pb-28 lg:pb-grid-margin bg-background">
+          <main className="flex-1 overflow-y-auto p-grid-margin pb-32 lg:pb-grid-margin">
             <div className="max-w-[1600px] mx-auto w-full animate-fade-in">
               {children}
             </div>

@@ -267,7 +267,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-lg">
         
         {/* Total a Receber */}
-        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30 flex flex-col justify-between hover:-translate-y-0.5 transition-transform duration-300">
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-card border border-outline-variant/30 flex flex-col justify-between hover:-translate-y-0.5 transition-transform duration-300">
           <div className="flex justify-between items-start">
             <h3 className="text-label-md font-label-md text-on-surface-variant mb-2 font-medium">Total a Receber</h3>
             <span className="material-symbols-outlined text-secondary opacity-70">payment_arrow_down</span>
@@ -284,7 +284,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
         </div>
 
         {/* Recebido */}
-        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30 flex flex-col justify-between hover:-translate-y-0.5 transition-transform duration-300">
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-card border border-outline-variant/30 flex flex-col justify-between hover:-translate-y-0.5 transition-transform duration-300">
           <div className="flex justify-between items-start">
             <h3 className="text-label-md font-label-md text-on-surface-variant mb-2 font-medium">Total Recebido</h3>
             <span className="material-symbols-outlined text-tertiary-container opacity-70">check_circle</span>
@@ -303,7 +303,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
         </div>
 
         {/* Pendente */}
-        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-outline-variant/30 flex flex-col justify-between hover:-translate-y-0.5 transition-transform duration-300">
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-card border border-outline-variant/30 flex flex-col justify-between hover:-translate-y-0.5 transition-transform duration-300">
           <div className="flex justify-between items-start">
             <h3 className="text-label-md font-label-md text-on-surface-variant mb-2 font-medium">Total Pendente</h3>
             <span className="material-symbols-outlined text-error opacity-70">hourglass_empty</span>
@@ -329,7 +329,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
         {/* Left: Devedores List & Create Form */}
         <div className="space-y-md">
           {/* Create Form */}
-          <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
+          <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-card">
             <h3 className="text-label-sm font-bold text-on-surface-variant mb-3 flex items-center gap-xs uppercase tracking-wider">
               <span className="material-symbols-outlined text-[18px]">person_add</span>
               Novo Devedor
@@ -362,7 +362,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
           </div>
 
           {/* Devedores List */}
-          <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-md">
+          <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-card space-y-md">
             <h3 className="text-label-sm font-bold text-on-surface-variant flex items-center gap-xs uppercase tracking-wider">
               <span className="material-symbols-outlined text-secondary">group</span>
               Contatos cadastrados
@@ -437,7 +437,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
         {/* Right: Installments Breakdown */}
         <div className="lg:col-span-2 space-y-md">
           {selectedDebtor ? (
-            <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-md">
+            <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md shadow-card space-y-md">
               
               {/* Header */}
               <div className="flex justify-between items-center pb-sm border-b border-outline-variant/20">
@@ -618,7 +618,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
 
             </div>
           ) : (
-            <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-16 text-center space-y-sm shadow-[0_4px_20px_rgba(0,0,0,0.03)] bg-zinc-900/10">
+            <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-16 text-center space-y-sm shadow-card bg-zinc-900/10">
               <span className="material-symbols-outlined text-4xl text-on-surface-variant opacity-50">group</span>
               <h3 className="text-body-md font-bold text-on-surface-variant">Nenhum Devedor Selecionado</h3>
               <p className="text-label-sm text-on-surface-variant max-w-sm mx-auto opacity-70">

@@ -382,7 +382,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
       </div>
 
       {/* Filters Bar Card */}
-      <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md flex flex-wrap lg:flex-nowrap gap-md items-end shadow-[0_4px_20px_rgba(0,0,0,0.03)] w-full mb-md select-none">
+      <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-md flex flex-wrap lg:flex-nowrap gap-md items-end shadow-card w-full mb-md select-none">
         {/* Cartão select column */}
         <div className="flex-1 min-w-[150px] lg:max-w-[200px]">
           <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs font-semibold">Cartão</label>
@@ -465,7 +465,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
           return (
             <div 
               key={inv.id} 
-              className="border border-outline-variant/30 bg-surface-container-lowest rounded-xl overflow-hidden hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:border-outline-variant/80 transition-all"
+              className="border border-outline-variant/30 bg-surface-container-lowest rounded-xl overflow-hidden hover:shadow-card hover:border-outline-variant/80 transition-all"
             >
               {/* Invoice Main Summary row */}
               <div className="p-md flex flex-wrap md:flex-nowrap justify-between items-center gap-md">

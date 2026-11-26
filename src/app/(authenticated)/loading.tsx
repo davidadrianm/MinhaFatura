@@ -12,7 +12,7 @@ export default function AuthenticatedLoading() {
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 h-32 flex flex-col justify-between animate-pulse"
+            className="bg-surface-container-lowest rounded-xl p-md shadow-card border border-outline-variant/20 h-32 flex flex-col justify-between animate-pulse"
           >
             <div className="flex justify-between items-start">
               <div className="h-4 w-32 bg-surface-container-high rounded" />
@@ -29,7 +29,7 @@ export default function AuthenticatedLoading() {
       {/* Main Content Skeleton (Bento Layout) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg mt-lg">
         {/* Large List Area (e.g. Transactions / Monthly Evolution) */}
-        <div className="lg:col-span-2 bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 h-[450px] flex flex-col justify-between animate-pulse">
+        <div className="lg:col-span-2 bg-surface-container-lowest rounded-xl p-md shadow-card border border-outline-variant/20 h-[450px] flex flex-col justify-between animate-pulse">
           <div className="flex justify-between items-center mb-md">
             <div className="h-6 w-36 bg-surface-container-highest rounded" />
             <div className="h-4 w-20 bg-surface-container-high rounded" />
@@ -52,7 +52,7 @@ export default function AuthenticatedLoading() {
         </div>
 
         {/* Small List / Donut Chart Area */}
-        <div className="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 h-[450px] flex flex-col justify-between animate-pulse">
+        <div className="bg-surface-container-lowest rounded-xl p-md shadow-card border border-outline-variant/20 h-[450px] flex flex-col justify-between animate-pulse">
           <div className="h-6 w-40 bg-surface-container-highest rounded mb-md" />
           
           <div className="flex-1 flex flex-col items-center justify-center py-md">

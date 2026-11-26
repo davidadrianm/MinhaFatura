@@ -3,6 +3,16 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+const leftItems = [
+  { href: '/dashboard', icon: 'home', label: 'Resumo' },
+  { href: '/cards', icon: 'credit_card', label: 'Cartões' },
+];
+
+const rightItems = [
+  { href: '/debtors', icon: 'group', label: 'Gastos' },
+  { href: '/categories', icon: 'category', label: 'Categorias' },
+];
+
 export default function BottomNavBar() {
   const pathname = usePathname();
 
@@ -12,69 +22,49 @@ export default function BottomNavBar() {
     return false;
   };
 
+  const renderItem = (item: { href: string; icon: string; label: string }) => {
+    const active = isActive(item.href);
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={`relative flex flex-col items-center justify-center w-16 py-1.5 rounded-2xl active:scale-90 transition-all ${
+          active ? 'text-secondary' : 'text-on-surface-variant'
+        }`}
+      >
+        <span
+          className={`flex items-center justify-center w-11 h-7 rounded-full transition-all duration-300 ${
+            active ? 'bg-secondary/15' : ''
+          }`}
+        >
+          <span
+            className="material-symbols-outlined text-[22px]"
+            style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}
+          >
+            {item.icon}
+          </span>
+        </span>
+        <span className={`text-[10px] mt-0.5 ${active ? 'font-bold' : 'font-medium'}`}>{item.label}</span>
+      </Link>
+    );
+  };
+
   return (
-    <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-surface border-t border-outline-variant/20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-50 lg:hidden">
-      {/* Home / Dashboard */}
-      <Link 
-        href="/dashboard" 
-        className={`flex flex-col items-center justify-center rounded-lg p-1 active:scale-90 transition-all ${
-          isActive('/dashboard') 
-            ? 'text-secondary font-bold' 
-            : 'text-on-surface-variant opacity-70'
-        }`}
-      >
-        <span className="material-symbols-outlined" style={isActive('/dashboard') ? { fontVariationSettings: "'FILL' 1" } : undefined}>home</span>
-        <span className="text-[10px] mt-1">Resumo</span>
-      </Link>
+    <nav className="fixed bottom-3 inset-x-3 z-50 lg:hidden pb-[env(safe-area-inset-bottom)]">
+      <div className="glass shadow-card rounded-[26px] flex justify-around items-center px-2 py-1.5">
+        {leftItems.map(renderItem)}
 
-      {/* Cartões */}
-      <Link 
-        href="/cards" 
-        className={`flex flex-col items-center justify-center rounded-lg p-1 active:scale-90 transition-all ${
-          isActive('/cards') 
-            ? 'text-secondary font-bold' 
-            : 'text-on-surface-variant opacity-70'
-        }`}
-      >
-        <span className="material-symbols-outlined" style={isActive('/cards') ? { fontVariationSettings: "'FILL' 1" } : undefined}>credit_card</span>
-        <span className="text-[10px] mt-1">Cartões</span>
-      </Link>
+        {/* Add FAB */}
+        <Link
+          href="/transactions?new=true"
+          aria-label="Nova transação"
+          className="btn-brand -mt-8 w-14 h-14 rounded-2xl flex items-center justify-center rotate-0 active:scale-90 ring-4 ring-background"
+        >
+          <span className="material-symbols-outlined text-[30px]">add</span>
+        </Link>
 
-      {/* Add FAB */}
-      <Link 
-        href="/transactions?new=true" 
-        className="flex flex-col items-center justify-center text-on-secondary hover:bg-secondary-container rounded-lg p-1 active:scale-90 transition-all -mt-6"
-      >
-        <div className="bg-secondary text-on-primary rounded-full p-2.5 shadow-lg">
-          <span className="material-symbols-outlined text-[28px]">add</span>
-        </div>
-      </Link>
-
-      {/* Gastos Compartilhados (Devedores) */}
-      <Link 
-        href="/debtors" 
-        className={`flex flex-col items-center justify-center rounded-lg p-1 active:scale-90 transition-all ${
-          isActive('/debtors') 
-            ? 'text-secondary font-bold' 
-            : 'text-on-surface-variant opacity-70'
-        }`}
-      >
-        <span className="material-symbols-outlined" style={isActive('/debtors') ? { fontVariationSettings: "'FILL' 1" } : undefined}>group</span>
-        <span className="text-[10px] mt-1">Gastos</span>
-      </Link>
-
-      {/* Categorias / Mais */}
-      <Link 
-        href="/categories" 
-        className={`flex flex-col items-center justify-center rounded-lg p-1 active:scale-90 transition-all ${
-          isActive('/categories') 
-            ? 'text-secondary font-bold' 
-            : 'text-on-surface-variant opacity-70'
-        }`}
-      >
-        <span className="material-symbols-outlined" style={isActive('/categories') ? { fontVariationSettings: "'FILL' 1" } : undefined}>category</span>
-        <span className="text-[10px] mt-1">Categorias</span>
-      </Link>
+        {rightItems.map(renderItem)}
+      </div>
     </nav>
   );
 }

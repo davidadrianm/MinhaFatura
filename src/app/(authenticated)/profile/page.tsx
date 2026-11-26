@@ -348,7 +348,7 @@ export default function ProfilePage() {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-md items-start">
       
       {/* Coluna da Esquerda: Resumo do Usuário */}
-      <section className="col-span-1 bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-lg space-y-lg shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+      <section className="col-span-1 bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-lg space-y-lg shadow-card">
         
         {/* Foto / Iniciais & Info Principal */}
         <div className="flex flex-col items-center text-center space-y-sm pb-lg border-b border-outline-variant/20">
@@ -413,7 +413,7 @@ export default function ProfilePage() {
       </section>
 
       {/* Coluna da Direita: Formulários de Configuração */}
-      <section className="col-span-1 lg:col-span-2 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] overflow-hidden">
+      <section className="col-span-1 lg:col-span-2 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-card overflow-hidden">
         
         {/* Navegação de Abas */}
         <div className="flex border-b border-outline-variant/20 bg-surface-container-low">
