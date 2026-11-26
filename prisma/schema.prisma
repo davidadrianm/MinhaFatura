@@ -11,7 +11,6 @@ generator client {
 model User {
   id           String                   @id @default(cuid())
   email        String                   @unique
-  password     String
   name         String
   theme        String                   @default("light")
   createdAt    DateTime                 @default(now())
@@ -123,6 +122,8 @@ model TransactionInstallment {
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   splits            InstallmentSplit[]
 
+  // Impede parcelas duplicadas (ex.: duas requisições gerando a mesma recorrência ao mesmo tempo)
+  @@unique([transactionId, installmentNumber])
   @@index([userId])
   @@index([cardId])
   @@index([transactionId])

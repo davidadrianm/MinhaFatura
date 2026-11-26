@@ -95,7 +95,7 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
           router.refresh();
         }
       }
-    } catch (err) {
+    } catch {
       setError('Erro de conexão.');
     } finally {
       setLoading(false);
@@ -130,7 +130,7 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
           router.refresh();
         }
       }
-    } catch (err) {
+    } catch {
       setError('Erro de conexão.');
     } finally {
       setLoading(false);
@@ -165,7 +165,7 @@ export default function CategoriesClient({ initialCategories }: CategoriesClient
       } else {
         await alert(data.error || 'Erro ao deletar categoria.', { type: 'error' });
       }
-    } catch (err) {
+    } catch {
       await alert('Erro de conexão.', { type: 'error' });
     }
   };

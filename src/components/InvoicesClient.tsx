@@ -82,60 +82,6 @@ interface InvoicesClientProps {
   cards: Card[];
 }
 
-const getMonthFilterOptions = (): SelectOption[] => {
-  const options: SelectOption[] = [
-    { value: 'all', label: 'Todo o Período', icon: 'date_range' },
-    { value: 'this-month', label: 'Este Mês', icon: 'calendar_today' },
-    { value: 'last-month', label: 'Mês Passado', icon: 'history' },
-    { value: 'next-month', label: 'Próximo Mês', icon: 'arrow_forward' },
-  ];
-
-  const now = new Date();
-  const months = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-  ];
-
-  for (let i = -6; i <= 6; i++) {
-    const d = new Date();
-    d.setMonth(now.getMonth() + i);
-    const m = d.getMonth() + 1;
-    const y = d.getFullYear();
-    const val = `${m.toString().padStart(2, '0')}-${y}`;
-    const label = `${months[m - 1]} de ${y}`;
-    
-    if (i !== 0 && i !== -1 && i !== 1) {
-      options.push({
-        value: val,
-        label,
-        icon: 'calendar_month'
-      });
-    } else {
-      const refIdx = options.findIndex(opt => {
-        if (i === 0 && opt.value === 'this-month') return true;
-        if (i === -1 && opt.value === 'last-month') return true;
-        if (i === 1 && opt.value === 'next-month') return true;
-        return false;
-      });
-      if (refIdx !== -1) {
-        options[refIdx].label = `${options[refIdx].label} (${months[m - 1]}/${y})`;
-      }
-    }
-  }
-
-  return options;
-};
-
-const getInvoiceDisplayMonthYear = (dueDateStr: string) => {
-  const d = new Date(dueDateStr);
-  // Subtract 1 month to get the spending reference month
-  d.setUTCMonth(d.getUTCMonth() - 1);
-  return {
-    month: d.getUTCMonth() + 1,
-    year: d.getUTCFullYear()
-  };
-};
-
 const getInvoiceDisplayData = (
   inv: { referenceMonth: number; referenceYear: number; closingDate: string; dueDate: string }
 ) => {
@@ -181,8 +127,6 @@ const matchMonthFilter = (
   const y = parseInt(yStr);
   return targetMonth === m && targetYear === y;
 };
-
-const monthFilterOptions = getMonthFilterOptions();
 
 const isLightColor = (hexColor: string) => {
   const hex = hexColor.replace('#', '');
@@ -353,7 +297,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
       } else {
         await alert(data.error || 'Erro ao pagar fatura.', { type: 'error' });
       }
-    } catch (err) {
+    } catch {
       await alert('Erro de conexão.', { type: 'error' });
     } finally {
       setLoadingId(null);
@@ -383,7 +327,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
       } else {
         await alert(data.error || 'Erro ao estornar fatura.', { type: 'error' });
       }
-    } catch (err) {
+    } catch {
       await alert('Erro de conexão.', { type: 'error' });
     } finally {
       setLoadingId(null);

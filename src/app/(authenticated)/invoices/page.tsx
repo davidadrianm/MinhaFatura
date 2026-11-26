@@ -24,10 +24,6 @@ export default async function InvoicesPage() {
 async function InvoicesDataWrapper({ userId }: { userId: string }) {
   const user = { userId };
 
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1; // 1-indexed (Jan = 1)
-  const currentYear = now.getFullYear();
-
   // Busca todas as faturas e os cartões ativos em paralelo
   const [invoices, cards] = await Promise.all([
     prisma.invoice.findMany({

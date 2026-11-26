@@ -1,16 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionUser } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
+import { parseCardInput } from '@/lib/card-input';
+import { errorResponse, ValidationError } from '@/lib/validation';
 
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    const user = await requireUser();
 
     const { id } = await params;
 
@@ -74,8 +73,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Erro ao arquivar cartão:', error);
-    return NextResponse.json({ success: false, error: 'Erro interno do servidor' }, { status: 500 });
+    return errorResponse(error, 'Erro ao arquivar cartão');
   }
 }
 
@@ -84,10 +82,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    const user = await requireUser();
 
     const { id } = await params;
 
@@ -100,32 +95,21 @@ export async function PUT(
       return NextResponse.json({ success: false, error: 'Cartão não encontrado' }, { status: 404 });
     }
 
-    const { name, bankName, brand, limit, closingDay, dueDay, color, parentCardId } = await request.json();
-
-    if (!name || !bankName || !brand || closingDay === undefined || dueDay === undefined) {
-      return NextResponse.json({ success: false, error: 'Preencha todos os campos obrigatórios' }, { status: 400 });
-    }
-
-    const closingDayInt = parseInt(closingDay);
-    const dueDayInt = parseInt(dueDay);
-
-    if (closingDayInt < 1 || closingDayInt > 31 || dueDayInt < 1 || dueDayInt > 31) {
-      return NextResponse.json({ success: false, error: 'Os dias de fechamento e vencimento devem ser entre 1 e 31' }, { status: 400 });
-    }
-
+    const input = parseCardInput(await request.json());
+    const parentCardId = input.parentCardId;
     let validatedParentCardId: string | null = null;
-    let finalLimit = limit ? parseFloat(limit) : 0;
+    let finalLimit = input.limit ?? 0;
 
     if (parentCardId) {
       if (parentCardId === id) {
-        return NextResponse.json({ success: false, error: 'Um cartão não pode compartilhar o limite consigo mesmo' }, { status: 400 });
+        throw new ValidationError('Um cartão não pode compartilhar o limite consigo mesmo');
       }
 
       const parentCard = await prisma.creditCard.findFirst({
         where: { id: parentCardId, userId: user.userId, isActive: true },
       });
       if (!parentCard) {
-        return NextResponse.json({ success: false, error: 'Cartão principal não encontrado' }, { status: 400 });
+        throw new ValidationError('Cartão principal não encontrado');
       }
 
       // Verifica se o cartão atual possui filhos (não permite hierarquia multinível)
@@ -133,38 +117,34 @@ export async function PUT(
         where: { parentCardId: id, isActive: true }
       });
       if (hasChildren > 0) {
-        return NextResponse.json({ success: false, error: 'Este cartão já é o limite principal de outros cartões e não pode ser compartilhado com outro' }, { status: 400 });
+        throw new ValidationError('Este cartão já é o limite principal de outros cartões e não pode ser compartilhado com outro');
       }
 
       // Verifica se o cartão pai também é filho (não permite 2 níveis de filhos)
       if (parentCard.parentCardId) {
-        return NextResponse.json({ success: false, error: 'O cartão principal selecionado já compartilha o limite de outro cartão' }, { status: 400 });
+        throw new ValidationError('O cartão principal selecionado já compartilha o limite de outro cartão');
       }
 
       validatedParentCardId = parentCardId;
       finalLimit = parentCard.limit;
-    } else {
-      if (limit === undefined || limit === null) {
-        return NextResponse.json({ success: false, error: 'Preencha todos os campos obrigatórios' }, { status: 400 });
-      }
     }
 
     const updatedCard = await prisma.creditCard.update({
       where: { id },
       data: {
-        name,
-        bankName,
-        brand,
+        name: input.name,
+        bankName: input.bankName,
+        brand: input.brand,
         limit: finalLimit,
-        closingDay: closingDayInt,
-        dueDay: dueDayInt,
-        color: color || undefined,
+        closingDay: input.closingDay,
+        dueDay: input.dueDay,
+        color: input.color,
         parentCardId: validatedParentCardId,
       },
     });
 
     // Se este cartão for um principal e o seu limite mudou, atualiza o limite de todos os filhos vinculados a ele
-    if (!parentCardId) {
+    if (!validatedParentCardId) {
       await prisma.creditCard.updateMany({
         where: { parentCardId: id },
         data: { limit: finalLimit }
@@ -173,8 +153,7 @@ export async function PUT(
 
     return NextResponse.json({ success: true, card: updatedCard });
   } catch (error) {
-    console.error('Erro ao atualizar cartão:', error);
-    return NextResponse.json({ success: false, error: 'Erro interno do servidor' }, { status: 500 });
+    return errorResponse(error, 'Erro ao atualizar cartão');
   }
 }
 

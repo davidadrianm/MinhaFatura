@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { ensureUserRecord } from '@/lib/user-record';
 
 export async function POST(request: Request) {
   try {
     const { name, email, password } = await request.json();
 
-    if (!name || !email || !password) {
+    if (typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string' || !name.trim() || !email || !password) {
       return NextResponse.json(
         { success: false, error: 'Preencha todos os campos obrigatórios' },
         { status: 400 }
@@ -17,6 +18,13 @@ export async function POST(request: Request) {
     if (!emailRegex.test(email.trim())) {
       return NextResponse.json(
         { success: false, error: 'Formato de e-mail inválido' },
+        { status: 400 }
+      );
+    }
+
+    if (name.trim().length > 100 || email.length > 254 || password.length > 128) {
+      return NextResponse.json(
+        { success: false, error: 'Dados muito longos' },
         { status: 400 }
       );
     }
@@ -39,11 +47,11 @@ export async function POST(request: Request) {
 
     const supabase = await createClient();
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: email.trim().toLowerCase(),
       password,
       options: {
         data: {
-          name,
+          name: name.trim(),
         },
       },
     });
@@ -55,16 +63,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (data.user) {
-      const { prisma } = await import('@/lib/prisma');
-      await prisma.user.create({
-        data: {
-          id: data.user.id,
-          email: email.trim().toLowerCase(),
-          name: name.trim(),
-          password: '', // dummy password since auth is handled by Supabase
-        }
-      });
+    // identities vazio = e-mail já cadastrado (o Supabase não retorna erro para não expor isso).
+    if (data.user && (data.user.identities?.length ?? 0) > 0) {
+      await ensureUserRecord(data.user);
     }
 
     return NextResponse.json({
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
         name: data.user?.user_metadata?.name || name,
       },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Erro no registro:', error);
     return NextResponse.json(
       { success: false, error: 'Ocorreu um erro interno do servidor' },

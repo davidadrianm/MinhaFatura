@@ -1,98 +1,41 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { NextRequest } from 'next/server';
 import { cache } from 'react';
+import type { User } from '@supabase/supabase-js';
+import { ValidationError } from './validation';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'gerenciador-cartao-secret-key-12345';
-
-interface UserPayload {
+export interface SessionUser {
   userId: string;
   email: string;
   name: string;
-  avatarUrl?: string | null;
+  avatarUrl: string | null;
 }
 
-export function hashPassword(password: string): string {
-  const salt = bcrypt.genSaltSync(10);
-  return bcrypt.hashSync(password, salt);
-}
-
-export function comparePassword(password: string, hash: string): boolean {
-  return bcrypt.compareSync(password, hash);
-}
-
-export function signToken(payload: UserPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
-}
-
-export function verifyToken(token: string): UserPayload | null {
-  try {
-    return jwt.verify(token, JWT_SECRET) as UserPayload;
-  } catch (error) {
-    return null;
-  }
+function toSessionUser(user: User): SessionUser {
+  return {
+    userId: user.id,
+    email: user.email || '',
+    name: user.user_metadata?.full_name || user.user_metadata?.name || 'Usuário',
+    avatarUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+  };
 }
 
 /**
- * Obtém o usuário autenticado a partir dos cookies da requisição.
- * Pode ser usado em API Routes ou Server Actions.
+ * Usuário autenticado (via cookies do Supabase), para Server Components e Route Handlers.
+ * `cache` evita consultar o Supabase mais de uma vez por requisição.
  */
-export async function getAuthenticatedUser(
-  req: NextRequest | Request
-): Promise<UserPayload | null> {
-  try {
-    const { createServerClient } = await import('@supabase/ssr');
-    
-    // Extrai os cookies da requisição
-    const cookieHeader = req.headers.get('cookie') || '';
-    
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieHeader.split(';').map(c => c.trim()).filter(Boolean).map(c => {
-              const parts = c.split('=');
-              return { name: parts[0], value: parts[1] || '' };
-            });
-          },
-          setAll() {
-            // Leitura apenas nesta função utilitária
-          }
-        }
-      }
-    );
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-    return {
-      userId: user.id,
-      email: user.email || '',
-      name: user.user_metadata?.full_name || user.user_metadata?.name || 'Usuário',
-      avatarUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
-    };
-  } catch (error) {
-    return null;
-  }
-}
-
-/**
- * Utilitário para uso direto em Server Components (lendo cookies do Next.js).
- */
-export const getSessionUser = cache(async () => {
+export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   try {
     const { createClient } = await import('@/lib/supabase/server');
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-    return {
-      userId: user.id,
-      email: user.email || '',
-      name: user.user_metadata?.full_name || user.user_metadata?.name || 'Usuário',
-      avatarUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
-    };
-  } catch (error) {
+    return user ? toSessionUser(user) : null;
+  } catch {
     return null;
   }
 });
+
+/** Igual a getSessionUser, mas lança 401 (tratado por errorResponse) se não houver sessão. */
+export async function requireUser(): Promise<SessionUser> {
+  const user = await getSessionUser();
+  if (!user) throw new ValidationError('Não autorizado', 401);
+  return user;
+}

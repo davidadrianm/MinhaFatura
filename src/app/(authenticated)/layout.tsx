@@ -5,6 +5,7 @@ import TopNavBar from '@/components/TopNavBar';
 import BottomNavBar from '@/components/BottomNavBar';
 import { ensureRecurringTransactions } from '@/lib/invoice-utils';
 import { DialogProvider } from '@/components/DialogProvider';
+import { ensureUserRecord } from '@/lib/user-record';
 
 export default async function AuthenticatedLayout({
   children,
@@ -17,8 +18,15 @@ export default async function AuthenticatedLayout({
     redirect('/');
   }
 
-  // Garante que as transações recorrentes tenham sempre 12 meses de faturamento futuro (roda em background)
-  ensureRecurringTransactions(user.userId).catch(err => console.error("Erro ao garantir transações recorrentes:", err));
+  // Garante a linha em User (contas antigas do Google não tinham) e mantém o e-mail sincronizado.
+  await ensureUserRecord({ id: user.userId, email: user.email, user_metadata: { name: user.name } });
+
+  // Garante 6 meses de parcelas futuras nas recorrências fixas (limitado a 1x por hora por usuário).
+  try {
+    await ensureRecurringTransactions(user.userId);
+  } catch (err) {
+    console.error('Erro ao garantir transações recorrentes:', err);
+  }
 
   return (
     <DialogProvider>

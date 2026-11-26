@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { comparePassword, hashPassword, signToken, getSessionUser } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
+import { errorResponse } from '@/lib/validation';
+import { DEFAULT_CATEGORIES } from '@/lib/user-record';
 
 export async function GET() {
   try {
-    const session = await getSessionUser();
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    const session = await requireUser();
 
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
@@ -43,20 +42,13 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error('Erro ao buscar perfil:', error);
-    return NextResponse.json(
-      { success: false, error: 'Erro interno do servidor' },
-      { status: 500 }
-    );
+    return errorResponse(error, 'Erro ao buscar perfil');
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    const session = await getSessionUser();
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    const session = await requireUser();
 
     const { name, email, currentPassword, newPassword, theme } = await request.json();
 
@@ -68,31 +60,15 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: 'Usuário não encontrado' }, { status: 404 });
     }
 
-    const updateData: { name?: string; email?: string; password?: string; theme?: string } = {};
+    const updateData: { name?: string; theme?: string } = {};
+    const messages: string[] = [];
 
-    // 1. Atualização de dados pessoais
-    if (name) updateData.name = name;
-    if (email && email !== user.email) {
-      // Validação do formato do e-mail no back-end
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email.trim())) {
-        return NextResponse.json(
-          { success: false, error: 'Formato de e-mail inválido' },
-          { status: 400 }
-        );
+    // 1. Nome
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim() || name.trim().length > 100) {
+        return NextResponse.json({ success: false, error: 'Nome inválido' }, { status: 400 });
       }
-
-      // Verifica se o email já está em uso por outro usuário
-      const existingUser = await prisma.user.findUnique({
-        where: { email },
-      });
-      if (existingUser) {
-        return NextResponse.json(
-          { success: false, error: 'Este e-mail já está em uso' },
-          { status: 400 }
-        );
-      }
-      updateData.email = email;
+      if (name.trim() !== user.name) updateData.name = name.trim();
     }
 
     // 2. Preferência de tema
@@ -106,14 +82,41 @@ export async function PUT(request: Request) {
       updateData.theme = theme;
     }
 
-    let passwordUpdated = false;
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const authEmail = (session.email || '').toLowerCase();
+    const wantsEmailChange = !!normalizedEmail && normalizedEmail !== authEmail;
 
-    // 3. Alteração de senha
-    if (currentPassword && newPassword) {
-      // Validação de segurança para a nova senha no back-end
-      if (newPassword.length < 6) {
+    if (wantsEmailChange) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(normalizedEmail) || normalizedEmail.length > 254) {
+        return NextResponse.json({ success: false, error: 'Formato de e-mail inválido' }, { status: 400 });
+      }
+      const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+      if (existingUser && existingUser.id !== session.userId) {
+        return NextResponse.json({ success: false, error: 'Este e-mail já está em uso' }, { status: 400 });
+      }
+    }
+
+    const wantsPasswordChange = !!(currentPassword || newPassword);
+    if (wantsPasswordChange && !(currentPassword && newPassword)) {
+      return NextResponse.json(
+        { success: false, error: 'Para alterar a senha, informe a senha atual e a nova senha' },
+        { status: 400 }
+      );
+    }
+
+    if (Object.keys(updateData).length === 0 && !wantsEmailChange && !wantsPasswordChange) {
+      return NextResponse.json({ success: false, error: 'Nenhum dado enviado para atualização' }, { status: 400 });
+    }
+
+    const { createClient } = await import('@/lib/supabase/server');
+    const supabase = await createClient();
+
+    // 3. Alteração de senha (validada com o e-mail do Supabase Auth, que é o usado no login)
+    if (wantsPasswordChange) {
+      if (typeof newPassword !== 'string' || newPassword.length < 6 || newPassword.length > 128) {
         return NextResponse.json(
-          { success: false, error: 'A nova senha deve ter no mínimo 6 caracteres' },
+          { success: false, error: 'A nova senha deve ter entre 6 e 128 caracteres' },
           { status: 400 }
         );
       }
@@ -126,13 +129,9 @@ export async function PUT(request: Request) {
         );
       }
 
-      const { createClient } = await import('@/lib/supabase/server');
-      const supabase = await createClient();
-
-      // Verifica se a senha atual está correta tentando autenticar novamente
       const { error: verifyError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: currentPassword,
+        email: session.email,
+        password: String(currentPassword),
       });
 
       if (verifyError) {
@@ -142,28 +141,30 @@ export async function PUT(request: Request) {
         );
       }
 
-      // Atualiza para a nova senha
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       if (updateError) {
+        console.error('Erro ao alterar senha:', updateError);
         return NextResponse.json(
-          { success: false, error: updateError.message },
+          { success: false, error: 'Não foi possível alterar a senha. Tente novamente.' },
           { status: 400 }
         );
       }
-
-      passwordUpdated = true;
-    } else if (newPassword || currentPassword) {
-      return NextResponse.json(
-        { success: false, error: 'Para alterar a senha, informe a senha atual e a nova senha' },
-        { status: 400 }
-      );
+      messages.push('Senha alterada.');
     }
 
-    if (Object.keys(updateData).length === 0 && !passwordUpdated) {
-      return NextResponse.json({ success: false, error: 'Nenhum dado enviado para atualização' }, { status: 400 });
+    // 4. Alteração de e-mail: feita no Supabase Auth (que controla o login).
+    // O Supabase envia um link de confirmação; a tabela User é sincronizada
+    // automaticamente quando a troca for confirmada (ensureUserRecord).
+    if (wantsEmailChange) {
+      const { error: emailError } = await supabase.auth.updateUser({ email: normalizedEmail });
+      if (emailError) {
+        console.error('Erro ao alterar e-mail:', emailError);
+        return NextResponse.json(
+          { success: false, error: 'Não foi possível alterar o e-mail. Tente novamente mais tarde.' },
+          { status: 400 }
+        );
+      }
+      messages.push(`Enviamos um link de confirmação para ${normalizedEmail}. O e-mail só muda depois da confirmação.`);
     }
 
     let updatedUser = user;
@@ -176,7 +177,8 @@ export async function PUT(request: Request) {
 
     const response = NextResponse.json({
       success: true,
-      message: 'Perfil atualizado com sucesso',
+      message: messages.length > 0 ? `Perfil atualizado. ${messages.join(' ')}` : 'Perfil atualizado com sucesso',
+      emailChangePending: wantsEmailChange,
       user: {
         id: updatedUser.id,
         name: updatedUser.name,
@@ -199,78 +201,52 @@ export async function PUT(request: Request) {
 
     return response;
   } catch (error) {
-    console.error('Erro ao atualizar perfil:', error);
-    return NextResponse.json(
-      { success: false, error: 'Erro interno do servidor' },
-      { status: 500 }
-    );
+    return errorResponse(error, 'Erro ao atualizar perfil');
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    const session = await getSessionUser();
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    const session = await requireUser();
 
     const userId = session.userId;
     const { deleteTransactions, deleteDebtors, deleteCards, deleteAll } = await request.json();
 
     if (deleteAll) {
-      // Zerar Tudo: apaga transações, faturas, devedores, cartões e categorias
-      await prisma.transaction.deleteMany({ where: { userId } });
-      await prisma.invoice.deleteMany({ where: { userId } });
-      await prisma.debtor.deleteMany({ where: { userId } });
-      await prisma.creditCard.deleteMany({ where: { userId } });
-      await prisma.category.deleteMany({ where: { userId } });
-
-      // Recria as categorias padrão
-      const defaultCategories = [
-        { name: 'Alimentação', color: '#ef4444' },
-        { name: 'Assinaturas', color: '#3b82f6' },
-        { name: 'Gastos Esporádicos', color: '#f97316' },
-        { name: 'Lazer', color: '#ec4899' },
-        { name: 'Moradia', color: '#8b5cf6' },
-        { name: 'Telecomunicação', color: '#06b6d4' },
-        { name: 'Transporte', color: '#10b981' },
-        { name: 'Outros', color: '#71717a' },
-      ];
-
-      await prisma.category.createMany({
-        data: defaultCategories.map((cat) => ({
-          name: cat.name,
-          color: cat.color,
-          userId,
-        })),
-      });
+      // Zerar Tudo: apaga transações, faturas, devedores, cartões e categorias e recria as categorias padrão
+      await prisma.$transaction([
+        prisma.transaction.deleteMany({ where: { userId } }),
+        prisma.invoice.deleteMany({ where: { userId } }),
+        prisma.debtor.deleteMany({ where: { userId } }),
+        prisma.creditCard.deleteMany({ where: { userId } }),
+        prisma.category.deleteMany({ where: { userId } }),
+        prisma.category.createMany({
+          data: DEFAULT_CATEGORIES.map((cat) => ({ ...cat, userId })),
+        }),
+      ]);
 
       return NextResponse.json({ success: true, message: 'Conta resetada com sucesso!' });
     }
 
     // Seleção seletiva
+    const ops = [];
     if (deleteCards) {
-      // Deleta cartões (deleta transações e faturas vinculadas via cascade no SQLite/Prisma)
-      await prisma.creditCard.deleteMany({ where: { userId } });
-      // Limpa faturas remanescentes
-      await prisma.invoice.deleteMany({ where: { userId } });
+      // Deleta cartões (transações e parcelas vão em cascata) e as faturas remanescentes
+      ops.push(prisma.creditCard.deleteMany({ where: { userId } }));
+      ops.push(prisma.invoice.deleteMany({ where: { userId } }));
     } else if (deleteTransactions) {
-      // Se não deletou cartões, mas quer deletar as transações:
-      await prisma.transaction.deleteMany({ where: { userId } });
-      await prisma.invoice.deleteMany({ where: { userId } });
+      ops.push(prisma.transaction.deleteMany({ where: { userId } }));
+      ops.push(prisma.invoice.deleteMany({ where: { userId } }));
     }
-
     if (deleteDebtors) {
-      // Deleta devedores
-      await prisma.debtor.deleteMany({ where: { userId } });
+      ops.push(prisma.debtor.deleteMany({ where: { userId } }));
+    }
+    if (ops.length > 0) {
+      await prisma.$transaction(ops);
     }
 
     return NextResponse.json({ success: true, message: 'Dados apagados com sucesso!' });
   } catch (error) {
-    console.error('Erro ao resetar conta:', error);
-    return NextResponse.json(
-      { success: false, error: 'Erro interno do servidor ao resetar conta' },
-      { status: 500 }
-    );
+    return errorResponse(error, 'Erro ao resetar conta');
   }
 }

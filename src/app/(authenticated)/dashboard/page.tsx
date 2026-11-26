@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { formatCalendarDate } from '@/lib/date-utils';
 import { calculateUsedLimit, getInvoiceStatus } from '@/lib/invoice-utils';
+import { addMonthsToRef, todayInAppTz } from '@/lib/date-utils';
+import { roundMoney, sumMoney } from '@/lib/money';
 import { Suspense } from 'react';
 import DashboardSkeleton from '@/components/skeletons/DashboardSkeleton';
 
@@ -66,20 +68,15 @@ export default async function DashboardPage() {
 async function DashboardDataWrapper({ userId }: { userId: string }) {
   const user = { userId };
 
+  // "Hoje" no fuso do app (o servidor da Vercel roda em UTC).
   const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
+  const { month: currentMonth, year: currentYear } = todayInAppTz(now);
 
-  let targetRefMonth = currentMonth - 1;
-  let targetRefYear = currentYear;
-  if (targetRefMonth === 0) {
-    targetRefMonth = 12;
-    targetRefYear -= 1;
-  }
+  // Fatura "do mês": a que fecha neste mês, cuja referência é o mês anterior.
+  const { month: targetRefMonth, year: targetRefYear } = addMonthsToRef(currentMonth, currentYear, -1);
 
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
-  sixMonthsAgo.setDate(1);
+  // Últimos 6 meses de referência (o atual e os 5 anteriores), para o gráfico.
+  const last6Refs = Array.from({ length: 6 }, (_, idx) => addMonthsToRef(currentMonth, currentYear, idx - 5));
 
   // Executa todas as consultas em paralelo para reduzir a latência de rede com o banco remoto
   const [
@@ -141,8 +138,9 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
     prisma.transactionInstallment.findMany({
       where: {
         userId: user.userId,
-        dueMonth: currentMonth,
-        dueYear: currentYear
+        // Mesmo ciclo usado em "gasto do mês" (antes era o ciclo seguinte, e o donut passava de 100%)
+        dueMonth: targetRefMonth,
+        dueYear: targetRefYear
       },
       include: {
         transaction: {
@@ -155,10 +153,14 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
     prisma.invoice.findMany({
       where: {
         userId: user.userId,
-        status: { in: ['open', 'closed', 'overdue'] },
+        status: { not: 'paid' },
+        paidAt: null,
         OR: [
-          { referenceYear: { gt: currentYear } },
-          { referenceYear: currentYear, referenceMonth: { gte: currentMonth } }
+          // A partir da fatura do mês (antes ficava de fora justamente a que vence agora)
+          { referenceYear: { gt: targetRefYear } },
+          { referenceYear: targetRefYear, referenceMonth: { gte: targetRefMonth } },
+          // ...e qualquer fatura atrasada
+          { dueDate: { lt: now } },
         ]
       },
       include: {
@@ -174,16 +176,15 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
       },
       take: 6
     }),
-    prisma.transaction.findMany({
+    prisma.transactionInstallment.findMany({
       where: {
         userId: user.userId,
-        purchaseDate: {
-          gte: sixMonthsAgo
-        }
+        OR: last6Refs.map((ref) => ({ dueMonth: ref.month, dueYear: ref.year })),
       },
       select: {
-        amountTotal: true,
-        purchaseDate: true
+        amount: true,
+        dueMonth: true,
+        dueYear: true
       }
     })
   ]);
@@ -198,10 +199,10 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
     status: getInvoiceStatus(inv)
   })).filter(inv => inv.status !== 'paid');
 
-  const totalLimits = cards.filter(c => !c.parentCardId).reduce((sum, card) => sum + card.limit, 0);
-  const availableLimit = totalLimits - totalLimitUsed;
-  const totalPendingDebtors = pendingDebtorsSum._sum.amount || 0.0;
-  const currentMonthSpent = activeCurrentMonthInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+  const totalLimits = sumMoney(cards.filter(c => !c.parentCardId).map((card) => card.limit));
+  const availableLimit = roundMoney(totalLimits - totalLimitUsed);
+  const totalPendingDebtors = roundMoney(pendingDebtorsSum._sum.amount || 0.0);
+  const currentMonthSpent = sumMoney(activeCurrentMonthInvoices.map((inv) => inv.totalAmount));
 
   // Calcula o valor dos devedores nas faturas deste mês
   const currentMonthDebtorsAmount = activeCurrentMonthInvoices.reduce((sum, inv) => {
@@ -212,10 +213,10 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
     return sum + invoiceDebtorsSum;
   }, 0);
 
-  const currentMonthTitularSpent = currentMonthSpent - currentMonthDebtorsAmount;
+  const currentMonthTitularSpent = roundMoney(currentMonthSpent - currentMonthDebtorsAmount);
 
   // Summing the listed upcoming invoices
-  const totalUpcomingSpent = activeAlertInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+  const totalUpcomingSpent = sumMoney(activeAlertInvoices.map((inv) => inv.totalAmount));
   const totalUpcomingDebtors = activeAlertInvoices.reduce((sum, inv) => {
     const invoiceDebtorsSum = inv.installments.reduce((instSum, inst) => {
       const splitSum = inst.splits ? inst.splits.reduce((sSum, split) => sSum + split.amount, 0) : 0;
@@ -223,7 +224,7 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
     }, 0);
     return sum + invoiceDebtorsSum;
   }, 0);
-  const totalUpcomingTitular = totalUpcomingSpent - totalUpcomingDebtors;
+  const totalUpcomingTitular = roundMoney(totalUpcomingSpent - totalUpcomingDebtors);
 
   const categoryMap: { [key: string]: { name: string; color: string; amount: number } } = {};
   installmentsThisMonth.forEach((inst) => {
@@ -238,11 +239,18 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
     categoryMap[cat.id].amount += inst.amount;
   });
 
-  const categoryList = Object.values(categoryMap).sort((a, b) => b.amount - a.amount);
+  const categoryList = Object.values(categoryMap)
+    .map((cat) => ({ ...cat, amount: roundMoney(cat.amount) }))
+    .sort((a, b) => b.amount - a.amount);
 
   const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
-  const getInvoiceDisplayDateDetails = (card: any, invoice: any, targetMonth: number, targetYear: number) => {
+  const getInvoiceDisplayDateDetails = (
+    card: { closingDay: number; dueDay: number },
+    invoice: { closingDate: Date; dueDate: Date; referenceMonth: number } | null | undefined,
+    targetMonth: number,
+    targetYear: number
+  ) => {
     if (invoice) {
       return {
         closingDateStr: new Date(invoice.closingDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
@@ -282,38 +290,32 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
     };
   };
 
-  const last6MonthsData: { label: string; amount: number }[] = [];
-
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date();
-    d.setMonth(d.getMonth() - i);
-    last6MonthsData.push({
-      label: monthNames[d.getMonth()],
-      amount: 0
-    });
-  }
-
-  transactionsLast6Months.forEach(tx => {
-    const txDate = new Date(tx.purchaseDate);
-    const txLabel = monthNames[txDate.getMonth()];
-    const index = last6MonthsData.findIndex(item => item.label === txLabel);
-    if (index !== -1) {
-      last6MonthsData[index].amount += tx.amountTotal;
-    }
-  });
+  // Gasto por mês de referência: cada parcela conta no ciclo em que cai
+  // (uma compra 10x aparece distribuída, e não inteira no mês da compra).
+  const last6MonthsData: { label: string; amount: number }[] = last6Refs.map((ref) => ({
+    label: monthNames[ref.month - 1],
+    amount: sumMoney(
+      transactionsLast6Months
+        .filter((inst) => inst.dueMonth === ref.month && inst.dueYear === ref.year)
+        .map((inst) => inst.amount)
+    ),
+  }));
 
   const maxAmount = Math.max(...last6MonthsData.map(d => d.amount), 1);
 
   // 9. Cálculo dinâmico para conic-gradient do donut chart
-  let gradientAccumulator = 0;
-  const donutSlices = categoryList.slice(0, 4).map((cat) => {
-    const percentage = currentMonthSpent > 0 ? (cat.amount / currentMonthSpent) * 100 : 0;
-    const start = gradientAccumulator;
-    gradientAccumulator += percentage;
+  const topCategories = categoryList.slice(0, 4);
+  const slicePercents = topCategories.map((cat) =>
+    currentMonthSpent > 0 ? (cat.amount / currentMonthSpent) * 100 : 0
+  );
+  const gradientAccumulator = slicePercents.reduce((sum, p) => sum + p, 0);
+  const donutSlices = topCategories.map((cat, idx) => {
+    const percentage = slicePercents[idx];
+    const start = slicePercents.slice(0, idx).reduce((sum, p) => sum + p, 0);
     return {
       color: cat.color,
       start: start.toFixed(1),
-      end: gradientAccumulator.toFixed(1),
+      end: (start + percentage).toFixed(1),
       percentage: percentage.toFixed(0)
     };
   });

@@ -1,16 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionUser } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
+import { errorResponse } from '@/lib/validation';
+import { getInvoiceStatus } from '@/lib/invoice-utils';
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    const user = await requireUser();
 
     const { id } = await params;
 
@@ -22,35 +21,22 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Fatura não encontrada' }, { status: 404 });
     }
 
-    // Determina o status correto com base na data atual
-    const now = new Date();
-    let correctStatus = 'open';
-    if (new Date(invoice.dueDate) < now) {
-      correctStatus = 'overdue';
-    } else if (new Date(invoice.closingDate) < now) {
-      correctStatus = 'closed';
-    }
+    // Determina o status correto com base na data atual (no fuso do app)
+    const correctStatus = getInvoiceStatus({ ...invoice, status: 'open', paidAt: null });
 
-    // Atualiza a fatura
-    await prisma.invoice.update({
-      where: { id },
-      data: {
-        status: correctStatus,
-        paidAt: null,
-      },
-    });
-
-    // Atualiza todas as parcelas associadas de volta para "pending"
-    await prisma.transactionInstallment.updateMany({
-      where: { invoiceId: id },
-      data: {
-        status: 'pending',
-      },
-    });
+    await prisma.$transaction([
+      prisma.invoice.update({
+        where: { id },
+        data: { status: correctStatus, paidAt: null },
+      }),
+      prisma.transactionInstallment.updateMany({
+        where: { invoiceId: id },
+        data: { status: 'pending' },
+      }),
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Erro ao estornar pagamento da fatura:', error);
-    return NextResponse.json({ success: false, error: 'Erro interno do servidor' }, { status: 500 });
+    return errorResponse(error, 'Erro ao estornar pagamento da fatura');
   }
 }

@@ -108,7 +108,7 @@ export default function ProfilePage() {
       localStorage.setItem('pref_show_tx_by_invoice', showTxByInvoice.toString());
       setPrefSuccess('Parâmetros de preferências salvos com sucesso!');
       setTimeout(() => setPrefSuccess(''), 3000);
-    } catch (err) {
+    } catch {
       setPrefError('Erro ao salvar parâmetros locais.');
     }
   };
@@ -124,7 +124,7 @@ export default function ProfilePage() {
       localStorage.setItem('pref_notify_monthly_report', notifyMonthlyReport.toString());
       setNotifSuccess('Configurações de notificações salvas com sucesso!');
       setTimeout(() => setNotifSuccess(''), 3000);
-    } catch (err) {
+    } catch {
       setNotifError('Erro ao salvar preferências de notificações.');
     }
   };
@@ -176,7 +176,7 @@ export default function ProfilePage() {
         // Also update cookie directly via JS
         document.cookie = `theme=${themeValue}; path=/; max-age=${60 * 60 * 24 * 365}`;
       }
-    } catch (err) {
+    } catch {
       setThemeError('Erro de conexão ao salvar tema.');
     }
   };
@@ -206,11 +206,12 @@ export default function ProfilePage() {
       if (!res.ok || !data.success) {
         setInfoError(data.error || 'Erro ao atualizar dados pessoais.');
       } else {
-        setInfoSuccess('Dados pessoais atualizados com sucesso!');
+        setInfoSuccess(data.emailChangePending ? data.message : 'Dados pessoais atualizados com sucesso!');
         setUser(data.user);
+        setEmail(data.user.email);
         router.refresh(); // Refresh layout to show new initials/name in NavBars
       }
-    } catch (err) {
+    } catch {
       setInfoError('Erro de conexão com o servidor.');
     } finally {
       setInfoLoading(false);
@@ -256,7 +257,7 @@ export default function ProfilePage() {
         setNewPassword('');
         setConfirmPassword('');
       }
-    } catch (err) {
+    } catch {
       setPassError('Erro de conexão com o servidor.');
     } finally {
       setPassLoading(false);
@@ -301,7 +302,7 @@ export default function ProfilePage() {
         await fetchProfile();
         router.refresh();
       }
-    } catch (err) {
+    } catch {
       setResetError('Erro de conexão ao tentar apagar dados.');
     } finally {
       setResetLoading(false);

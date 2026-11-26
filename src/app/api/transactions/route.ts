@@ -1,14 +1,24 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionUser } from '@/lib/auth';
-import { createInstallmentsForTransaction, ensureRecurringTransactions, calculateInvoiceDate, shiftMonth } from '@/lib/invoice-utils';
+import { requireUser } from '@/lib/auth';
+import { createInstallmentsForTransaction, ensureRecurringTransactions, TX_OPTIONS } from '@/lib/invoice-utils';
+import {
+  errorResponse,
+  parseDateOnly,
+  parseEnum,
+  parseId,
+  parseIntInRange,
+  parseMoney,
+  parseSplits,
+  parseString,
+  requireString,
+} from '@/lib/validation';
+import { assertOwnership } from '@/lib/ownership';
+import { MAX_INSTALLMENTS, RECURRENCE_PERIODS, RECURRENCE_TYPES } from '@/lib/constants';
 
 export async function GET(request: Request) {
   try {
-    const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    const user = await requireUser();
 
     const { searchParams } = new URL(request.url);
     const cardId = searchParams.get('cardId') || undefined;
@@ -48,83 +58,71 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, transactions });
   } catch (error) {
-    console.error('Erro ao buscar transações:', error);
-    return NextResponse.json({ success: false, error: 'Erro interno' }, { status: 500 });
+    return errorResponse(error, 'Erro ao buscar transações');
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
+    const user = await requireUser();
+
+    const body = await request.json();
+
+    const description = requireString(body.description, 'Descrição', 200);
+    const purchaseDate = parseDateOnly(body.purchaseDate, 'Data da compra');
+    const amountTotal = parseMoney(body.amountTotal, 'Valor total');
+    const cardId = parseId(body.cardId, 'Cartão');
+    const categoryId = parseId(body.categoryId, 'Categoria');
+    const notes = parseString(body.notes, 'Observações', { max: 1000, required: false }) ?? null;
+    const recurrenceType = parseEnum(body.recurrenceType, 'Tipo de recorrência', RECURRENCE_TYPES, 'none');
+    const recurrencePeriod = parseEnum(body.recurrencePeriod, 'Período de recorrência', RECURRENCE_PERIODS, 'monthly');
+
+    let installmentsCount = 1;
+    let installmentStart = 1;
+    if (recurrenceType === 'installments') {
+      installmentsCount = parseIntInRange(body.installmentsCount, 'Quantidade de parcelas', 1, MAX_INSTALLMENTS);
+      installmentStart = body.installmentStart === undefined
+        ? 1
+        : parseIntInRange(body.installmentStart, 'Parcela inicial', 1, installmentsCount);
+    } else if (recurrenceType === 'fixed') {
+      installmentsCount = parseIntInRange(body.installmentsCount ?? 6, 'Quantidade de meses', 1, 24);
     }
 
-    const { 
-      description, 
-      purchaseDate, 
-      amountTotal, 
-      installmentsCount, 
-      cardId, 
-      categoryId, 
-      notes, 
-      splits,
-      recurrenceType = 'none',
-      recurrencePeriod = 'monthly',
-      installmentStart = 1,
-      selectedMonth,
-      selectedYear,
-    } = await request.json();
+    const splits = parseSplits(body.splits, amountTotal);
 
-    if (!description || !purchaseDate || !amountTotal || !installmentsCount || !cardId || !categoryId) {
-      return NextResponse.json({ success: false, error: 'Preencha todos os campos obrigatórios' }, { status: 400 });
-    }
-
-    const totalAmount = parseFloat(amountTotal);
-
-    // Valida se a soma dos splits não ultrapassa o valor total da transação
-    if (splits && splits.length > 0) {
-      const splitsSum = splits.reduce((sum: number, split: any) => sum + parseFloat(split.amount), 0);
-      if (splitsSum > totalAmount) {
-        return NextResponse.json({ success: false, error: 'A soma das divisões não pode exceder o valor total da compra' }, { status: 400 });
-      }
-    }
-
-    let basePurchaseDate = new Date(`${purchaseDate}T12:00:00.000Z`);
-    let finalInstallmentStart = parseInt(installmentStart.toString());
-
-    // Cria a transação com splits (se houver)
-    const transaction = await prisma.transaction.create({
-      data: {
-        userId: user.userId,
-        cardId,
-        categoryId,
-        description,
-        purchaseDate: basePurchaseDate,
-        amountTotal: totalAmount,
-        installmentsCount: parseInt(installmentsCount),
-        notes,
-        recurrenceType,
-        recurrencePeriod,
-        installmentStart: finalInstallmentStart,
-        splits: splits && splits.length > 0 ? {
-          create: splits.map((s: any) => ({
-            debtorId: s.debtorId,
-            amount: parseFloat(s.amount),
-          }))
-        } : undefined,
-      },
+    await assertOwnership(user.userId, {
+      cardId,
+      categoryId,
+      debtorIds: splits.map((s) => s.debtorId),
     });
 
-    // Gera as parcelas e atualiza faturas
-    await createInstallmentsForTransaction(transaction.id);
+    const transaction = await prisma.$transaction(async (db) => {
+      const created = await db.transaction.create({
+        data: {
+          userId: user.userId,
+          cardId,
+          categoryId,
+          description,
+          purchaseDate,
+          amountTotal,
+          installmentsCount,
+          notes,
+          recurrenceType,
+          recurrencePeriod,
+          installmentStart,
+          splits: splits.length > 0 ? { create: splits } : undefined,
+        },
+      });
+      await createInstallmentsForTransaction(created.id, db);
+      return created;
+    }, TX_OPTIONS);
 
-    // Garante que as transações recorrentes tenham sempre 12 meses de faturamento futuro (roda em background)
-    ensureRecurringTransactions(user.userId).catch(err => console.error("Erro ao processar transações recorrentes:", err));
+    if (recurrenceType === 'fixed') {
+      await ensureRecurringTransactions(user.userId, { force: true });
+    }
 
     return NextResponse.json({ success: true, transaction });
-  } catch (error: any) {
-    console.error('Erro ao criar transação:', error);
-    return NextResponse.json({ success: false, error: error.message || 'Erro interno' }, { status: 500 });
+  } catch (error) {
+    return errorResponse(error, 'Erro ao criar transação');
   }
 }

@@ -26,50 +26,6 @@ const bankPresets: { [key: string]: string } = {
   'Banco do Brasil': '#FCFC30',
 };
 
-const getMonthFilterOptions = (): SelectOption[] => {
-  const options: SelectOption[] = [
-    { value: 'all', label: 'Todo o Período', icon: 'date_range' },
-    { value: 'this-month', label: 'Este Mês', icon: 'calendar_today' },
-    { value: 'last-month', label: 'Mês Passado', icon: 'history' },
-    { value: 'next-month', label: 'Próximo Mês', icon: 'arrow_forward' },
-  ];
-
-  const now = new Date();
-  const months = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-  ];
-
-  for (let i = -6; i <= 6; i++) {
-    const d = new Date();
-    d.setMonth(now.getMonth() + i);
-    const m = d.getMonth() + 1;
-    const y = d.getFullYear();
-    const val = `${m.toString().padStart(2, '0')}-${y}`;
-    const label = `${months[m - 1]} de ${y}`;
-    
-    if (i !== 0 && i !== -1 && i !== 1) {
-      options.push({
-        value: val,
-        label,
-        icon: 'calendar_month'
-      });
-    } else {
-      const refIdx = options.findIndex(opt => {
-        if (i === 0 && opt.value === 'this-month') return true;
-        if (i === -1 && opt.value === 'last-month') return true;
-        if (i === 1 && opt.value === 'next-month') return true;
-        return false;
-      });
-      if (refIdx !== -1) {
-        options[refIdx].label = `${options[refIdx].label} (${months[m - 1]}/${y})`;
-      }
-    }
-  }
-
-  return options;
-};
-
 const getFilterMonthYear = (filterVal: string): { month: number; year: number } | null => {
   if (filterVal === 'all') return null;
   
@@ -600,7 +556,7 @@ export default function TransactionsClient({
           })
           .catch(err => console.error("Erro ao recarregar transações:", err));
       }
-    } catch (err) {
+    } catch {
       setError('Erro de conexão.');
     } finally {
       setLoading(false);
@@ -701,25 +657,6 @@ export default function TransactionsClient({
   };
 
 
-
-  const handleNewTransactionClick = () => {
-    setTxToEdit(null);
-    setDescription('');
-    setAmountTotal('');
-    setAmountFormatted('');
-    setInstallmentsCount('1');
-    setNotes('');
-    setPurchaseDate(new Date().toISOString().split('T')[0]);
-    setCardId(cards[0]?.id || '');
-    setCategoryId(categories[0]?.id || '');
-    setIsSplit(false);
-    setFormSplits([]);
-    setRecurrenceType('none');
-    setRecurrencePeriod('monthly');
-    setInstallmentStart('1');
-    setError('');
-    setIsOpen(true);
-  };
 
   const handleSaveEditedTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -823,7 +760,7 @@ export default function TransactionsClient({
           })
           .catch(err => console.error("Erro ao recarregar transações pós-edição:", err));
       }
-    } catch (err) {
+    } catch {
       setError('Erro de conexão ao salvar alteração.');
     } finally {
       setLoading(false);
@@ -884,7 +821,7 @@ export default function TransactionsClient({
       } else {
         await alert(data.error || 'Erro ao deletar transação.', { type: 'error' });
       }
-    } catch (err) {
+    } catch {
       await alert('Erro de conexão.', { type: 'error' });
     }
   };

@@ -252,7 +252,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
           }, 300);
         }
       }
-    } catch (err) {
+    } catch {
       setError('Erro de conexão com o servidor.');
     } finally {
       setLoading(false);
@@ -298,7 +298,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
           window.location.reload();
         }, 300);
       }
-    } catch (err) {
+    } catch {
       setError('Erro de conexão com o servidor.');
     } finally {
       setLoading(false);
@@ -328,7 +328,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
       } else {
         await alert(data.error || 'Erro ao arquivar cartão.', { type: 'error' });
       }
-    } catch (err) {
+    } catch {
       await alert('Erro de conexão.', { type: 'error' });
     }
   };

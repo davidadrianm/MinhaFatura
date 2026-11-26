@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MonthPicker from './MonthPicker';
 import { useDialog } from './DialogProvider';
@@ -146,7 +146,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
           }, 300);
         }
       }
-    } catch (err) {
+    } catch {
       setError('Erro de conexão.');
     } finally {
       setLoading(false);
@@ -186,7 +186,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
       } else {
         await alert(data.error || 'Erro ao excluir devedor.', { type: 'error' });
       }
-    } catch (err) {
+    } catch {
       await alert('Erro de conexão.', { type: 'error' });
     }
   };
@@ -225,7 +225,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
       } else {
         await alert(data.error || 'Erro ao alterar status.', { type: 'error' });
       }
-    } catch (err) {
+    } catch {
       await alert('Erro de conexão.', { type: 'error' });
     } finally {
       setTogglingId(null);

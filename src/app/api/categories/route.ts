@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionUser } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
+import { errorResponse, parseHexColor, requireString } from '@/lib/validation';
 
 export async function GET() {
   try {
-    const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    const user = await requireUser();
 
     const categories = await prisma.category.findMany({
       where: { userId: user.userId },
@@ -21,23 +19,17 @@ export async function GET() {
 
     return NextResponse.json({ success: true, categories });
   } catch (error) {
-    console.error('Erro ao buscar categorias:', error);
-    return NextResponse.json({ success: false, error: 'Erro interno' }, { status: 500 });
+    return errorResponse(error, 'Erro ao buscar categorias');
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    const user = await requireUser();
 
-    const { name, color } = await request.json();
-
-    if (!name || !color) {
-      return NextResponse.json({ success: false, error: 'Preencha o nome e selecione uma cor' }, { status: 400 });
-    }
+    const body = await request.json();
+    const name = requireString(body.name, 'Nome da categoria', 50);
+    const color = parseHexColor(body.color, 'Cor', true) as string;
 
     const category = await prisma.category.create({
       data: {
@@ -49,7 +41,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, category });
   } catch (error) {
-    console.error('Erro ao criar categoria:', error);
-    return NextResponse.json({ success: false, error: 'Erro interno' }, { status: 500 });
+    return errorResponse(error, 'Erro ao criar categoria');
   }
 }

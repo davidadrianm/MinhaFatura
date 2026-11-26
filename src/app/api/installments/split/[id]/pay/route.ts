@@ -1,16 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionUser } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
+import { errorResponse } from '@/lib/validation';
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    const user = await requireUser();
 
     const { id } = await params;
 
@@ -41,7 +39,6 @@ export async function POST(
 
     return NextResponse.json({ success: true, paid: updated.paid, paidAt: updated.paidAt });
   } catch (error) {
-    console.error('Erro ao alternar pagamento da divisão:', error);
-    return NextResponse.json({ success: false, error: 'Erro interno do servidor' }, { status: 500 });
+    return errorResponse(error, 'Erro ao alternar pagamento da divisão');
   }
 }

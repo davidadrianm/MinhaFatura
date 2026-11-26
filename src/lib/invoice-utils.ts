@@ -1,10 +1,46 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
+import { isUniqueViolation } from './prisma-errors';
+import { installmentShare, roundMoney, sumMoney } from './money';
+import { todayInAppTz, utcDateOnly } from './date-utils';
+
+/** Cliente do Prisma ou cliente de uma transação ($transaction). */
+export type Db = Prisma.TransactionClient;
+
+/** Opções padrão para transações interativas (o banco é remoto, então damos folga). */
+export const TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 };
 
 interface InvoiceDetails {
   referenceMonth: number;
   referenceYear: number;
   closingDate: Date;
   dueDate: Date;
+}
+
+export type RecurrencePeriod = 'daily' | 'weekly' | 'biweekly' | 'monthly';
+
+function daysInMonth(year: number, monthIdx: number): number {
+  return new Date(Date.UTC(year, monthIdx + 1, 0)).getUTCDate();
+}
+
+/**
+ * Cria uma data UTC no dia `day` do mês, limitando ao último dia do mês
+ * (ex.: fechamento dia 31 em fevereiro → 28/02, e não 03/03).
+ * `monthIdx` pode passar de 11 ou ser negativo; o ano é ajustado.
+ */
+export function dateAtDay(
+  year: number,
+  monthIdx: number,
+  day: number,
+  hours = 0,
+  minutes = 0,
+  seconds = 0,
+  ms = 0
+): Date {
+  const first = new Date(Date.UTC(year, monthIdx, 1));
+  const y = first.getUTCFullYear();
+  const m = first.getUTCMonth();
+  return new Date(Date.UTC(y, m, Math.min(day, daysInMonth(y, m)), hours, minutes, seconds, ms));
 }
 
 /**
@@ -24,27 +60,45 @@ export function shiftMonth(date: Date, months: number): Date {
 }
 
 /**
+ * Soma `steps` períodos de recorrência a uma data, sempre a partir da data base
+ * (31/01 + 1 mês = 28/02; + 2 meses = 31/03).
+ */
+export function addPeriod(base: Date, period: string, steps: number): Date {
+  const d = new Date(base.getTime());
+  if (period === 'daily') {
+    d.setUTCDate(d.getUTCDate() + steps);
+    return d;
+  }
+  if (period === 'weekly') {
+    d.setUTCDate(d.getUTCDate() + steps * 7);
+    return d;
+  }
+  if (period === 'biweekly') {
+    d.setUTCDate(d.getUTCDate() + steps * 15);
+    return d;
+  }
+  return shiftMonth(base, steps);
+}
+
+/**
  * Calcula os detalhes da fatura para uma data de compra específica,
  * baseado no dia de fechamento e dia de vencimento do cartão.
+ * Compras feitas no próprio dia do fechamento vão para a fatura seguinte.
  */
 export function calculateInvoiceDate(
   purchaseDate: Date,
   closingDay: number,
   dueDay: number
 ): InvoiceDetails {
-  // Use UTC methods to avoid timezone-shifting the calendar date.
-  // e.g. new Date("2026-06-04") is midnight UTC; local getMonth() on UTC-4
-  // returns May (4) instead of June (5), causing wrong invoice assignment.
+  // Métodos UTC para não deslocar a data de calendário pelo fuso.
   const year = purchaseDate.getUTCFullYear();
   const month = purchaseDate.getUTCMonth(); // 0-indexed
 
-  // Closing date for the purchase month (UTC) - set to midnight of the closing day
-  const closingThisMonth = new Date(Date.UTC(year, month, closingDay, 0, 0, 0, 0));
+  const closingThisMonth = dateAtDay(year, month, closingDay);
 
-  let refMonth = month + 1; // 1-indexed (Jan = 1)
+  let refMonth = month + 1; // 1-indexed (Jan = 1) — mês em que a fatura fecha
   let refYear = year;
 
-  // If the purchase date is on or after this month's closing, roll forward to next month
   if (purchaseDate >= closingThisMonth) {
     refMonth += 1;
     if (refMonth > 12) {
@@ -53,25 +107,13 @@ export function calculateInvoiceDate(
     }
   }
 
-  // Final closing date (UTC)
-  const closingDate = new Date(Date.UTC(refYear, refMonth - 1, closingDay, 23, 59, 59, 999));
+  const closingDate = dateAtDay(refYear, refMonth - 1, closingDay, 23, 59, 59, 999);
 
-  // Due date: if dueDay <= closingDay, due falls in the month after closing
-  let dueMonthIdx = refMonth - 1; // 0-indexed
-  let dueYear = refYear;
+  // Se o dia de vencimento é menor ou igual ao de fechamento, vence no mês seguinte ao fechamento.
+  const dueMonthIdx = dueDay <= closingDay ? refMonth : refMonth - 1;
+  const dueDate = dateAtDay(refYear, dueMonthIdx, dueDay, 23, 59, 59, 999);
 
-  if (dueDay <= closingDay) {
-    dueMonthIdx += 1;
-    if (dueMonthIdx > 11) {
-      dueMonthIdx = 0;
-      dueYear += 1;
-    }
-  }
-
-  const dueDate = new Date(Date.UTC(dueYear, dueMonthIdx, dueDay, 23, 59, 59, 999));
-
-  // Shift reference month back by 1 month so that the "referenceMonth" matches the purchase month (compras)
-  // instead of the closing month.
+  // O mês de referência é o mês anterior ao fechamento (mês em que o ciclo de compras começa).
   let referenceMonth = refMonth - 1;
   let referenceYear = refYear;
   if (referenceMonth === 0) {
@@ -79,17 +121,12 @@ export function calculateInvoiceDate(
     referenceYear -= 1;
   }
 
-  return {
-    referenceMonth,
-    referenceYear,
-    closingDate,
-    dueDate,
-  };
+  return { referenceMonth, referenceYear, closingDate, dueDate };
 }
 
-
 /**
- * Obtém ou cria uma fatura para o mês e ano de referência especificados.
+ * Obtém ou cria uma fatura para o mês e ano de referência (upsert atômico,
+ * sem corrida entre duas requisições simultâneas).
  */
 export async function getOrCreateInvoice(
   userId: string,
@@ -97,388 +134,277 @@ export async function getOrCreateInvoice(
   refMonth: number,
   refYear: number,
   closingDate: Date,
-  dueDate: Date
+  dueDate: Date,
+  db: Db = prisma
 ) {
-  // Tenta encontrar a fatura existente
-  let invoice = await prisma.invoice.findUnique({
+  return db.invoice.upsert({
     where: {
-      cardId_referenceMonth_referenceYear: {
-        cardId,
-        referenceMonth: refMonth,
-        referenceYear: refYear,
-      },
+      cardId_referenceMonth_referenceYear: { cardId, referenceMonth: refMonth, referenceYear: refYear },
+    },
+    update: {},
+    create: {
+      userId,
+      cardId,
+      referenceMonth: refMonth,
+      referenceYear: refYear,
+      closingDate,
+      dueDate,
+      totalAmount: 0,
+      status: 'open',
     },
   });
-
-  if (!invoice) {
-    invoice = await prisma.invoice.create({
-      data: {
-        userId,
-        cardId,
-        referenceMonth: refMonth,
-        referenceYear: refYear,
-        closingDate,
-        dueDate,
-        totalAmount: 0.0,
-        status: 'open',
-      },
-    });
-  }
-
-  return invoice;
 }
 
 /**
  * Recalcula o valor total de uma fatura com base nas parcelas vinculadas a ela.
+ * Faturas vazias são removidas, exceto as pagas (para não perder o histórico de pagamento).
  */
-export async function recalculateInvoiceAmount(invoiceId: string): Promise<number> {
-  const invoice = await prisma.invoice.findUnique({
-    where: { id: invoiceId },
-  });
-
+export async function recalculateInvoiceAmount(invoiceId: string, db: Db = prisma): Promise<number> {
+  const invoice = await db.invoice.findUnique({ where: { id: invoiceId } });
   if (!invoice) return 0;
 
-  // Verifica se a fatura ainda possui parcelas. Se não possuir, ela pode ser removida.
-  const installmentsCount = await prisma.transactionInstallment.count({
-    where: { invoiceId }
+  const installments = await db.transactionInstallment.findMany({
+    where: { invoiceId },
+    select: { amount: true },
   });
 
-  if (installmentsCount === 0) {
-    await prisma.invoice.delete({
-      where: { id: invoiceId }
-    });
+  if (installments.length === 0 && invoice.status !== 'paid' && !invoice.paidAt) {
+    await db.invoice.delete({ where: { id: invoiceId } });
     return 0;
   }
 
-  // Soma todas as parcelas vinculadas a esta fatura
-  const aggregate = await prisma.transactionInstallment.aggregate({
-    where: {
-      invoiceId,
-    },
-    _sum: {
-      amount: true,
-    },
-  });
-
-  const totalAmount = aggregate._sum.amount || 0.0;
-
-  // Atualiza o valor na fatura
-  await prisma.invoice.update({
-    where: { id: invoiceId },
-    data: {
-      totalAmount,
-    },
-  });
-
+  const totalAmount = sumMoney(installments.map((i) => i.amount));
+  await db.invoice.update({ where: { id: invoiceId }, data: { totalAmount } });
   return totalAmount;
+}
+
+export async function recalculateInvoices(invoiceIds: Iterable<string>, db: Db = prisma) {
+  for (const id of new Set(invoiceIds)) {
+    await recalculateInvoiceAmount(id, db);
+  }
+}
+
+/** Status de pagamento de um devedor numa parcela, para ser preservado em edições. */
+export type SplitStatusMap = Map<string, { paid: boolean; paidAt: Date | null }>;
+
+export function splitStatusFrom(splits: { debtorId: string; paid: boolean; paidAt: Date | null }[]): SplitStatusMap {
+  return new Map(splits.map((s) => [s.debtorId, { paid: s.paid, paidAt: s.paidAt }]));
+}
+
+interface CreateInstallmentsOptions {
+  /** Cria apenas as parcelas com estes números (as demais já existem em outra transação). */
+  onlyNumbers?: Set<number>;
+  /** Status dos devedores a restaurar, na ordem das parcelas criadas. */
+  preservedSplitStatus?: SplitStatusMap[];
 }
 
 /**
  * Cria as parcelas para uma determinada transação e as associa às faturas correspondentes.
+ * Devolve as parcelas criadas, em ordem.
  */
-export async function createInstallmentsForTransaction(transactionId: string): Promise<void> {
-  const transaction = await prisma.transaction.findUnique({
+export async function createInstallmentsForTransaction(
+  transactionId: string,
+  db: Db = prisma,
+  options: CreateInstallmentsOptions = {}
+) {
+  const transaction = await db.transaction.findUnique({
     where: { id: transactionId },
-    include: {
-      card: true,
-      splits: true,
-    },
+    include: { card: true, splits: true },
   });
-
   if (!transaction) throw new Error('Transação não encontrada');
 
-  const {
-    installmentsCount,
-    amountTotal,
-    userId,
-    cardId,
-    purchaseDate,
-    card,
-    recurrenceType = 'none',
-    recurrencePeriod = 'monthly',
-    installmentStart = 1
-  } = transaction;
+  const { installmentsCount, amountTotal, userId, cardId, purchaseDate, card } = transaction;
+  const recurrencePeriod = transaction.recurrencePeriod || 'monthly';
+  const installmentStart = transaction.installmentStart || 1;
+  const isFixed = transaction.recurrenceType === 'fixed' || transaction.recurrenceType === 'fixed_ended';
 
-  const isFixed = recurrenceType === 'fixed';
-
-  const invoiceIdsToRecalculate = new Set<string>();
+  const invoiceIds = new Set<string>();
+  const created: { id: string; installmentNumber: number }[] = [];
+  const splitRows: Prisma.InstallmentSplitCreateManyInput[] = [];
 
   const loopStart = isFixed ? 1 : installmentStart;
-  const loopEnd = installmentsCount;
+  for (let i = loopStart; i <= installmentsCount; i++) {
+    if (options.onlyNumbers && !options.onlyNumbers.has(i)) continue;
 
-  for (let i = loopStart; i <= loopEnd; i++) {
-    // Calcula a data de compra da parcela com base no período de repetição
-    const installmentPurchaseDate = new Date(purchaseDate);
-    const diff = isFixed ? (i - 1) : (i - installmentStart);
-    if (recurrencePeriod === 'daily') {
-      installmentPurchaseDate.setUTCDate(purchaseDate.getUTCDate() + diff);
-    } else if (recurrencePeriod === 'weekly') {
-      installmentPurchaseDate.setUTCDate(purchaseDate.getUTCDate() + diff * 7);
-    } else if (recurrencePeriod === 'biweekly') {
-      installmentPurchaseDate.setUTCDate(purchaseDate.getUTCDate() + diff * 15);
-    } else { // monthly
-      installmentPurchaseDate.setUTCMonth(purchaseDate.getUTCMonth() + diff);
-    }
-
-    // Determina os detalhes da fatura para esta parcela
+    const steps = isFixed ? i - 1 : i - installmentStart;
+    const installmentDate = addPeriod(purchaseDate, recurrencePeriod, steps);
     const { referenceMonth, referenceYear, closingDate, dueDate } = calculateInvoiceDate(
-      installmentPurchaseDate,
+      installmentDate,
       card.closingDay,
       card.dueDay
     );
 
-    // Obtém ou cria a fatura
-    const invoice = await getOrCreateInvoice(
-      userId,
-      cardId,
-      referenceMonth,
-      referenceYear,
-      closingDate,
-      dueDate
-    );
+    const invoice = await getOrCreateInvoice(userId, cardId, referenceMonth, referenceYear, closingDate, dueDate, db);
+    invoiceIds.add(invoice.id);
 
-    invoiceIdsToRecalculate.add(invoice.id);
+    const amount = isFixed ? roundMoney(amountTotal) : installmentShare(amountTotal, installmentsCount, i);
 
-    // Calcula o valor da parcela para o índice i (distribuindo sobras de centavos nas primeiras parcelas)
-    let installmentAmount;
-    if (isFixed) {
-      installmentAmount = amountTotal;
-    } else {
-      const sign = Math.sign(amountTotal);
-      const totalCents = Math.round(Math.abs(amountTotal) * 100);
-      const baseCents = Math.floor(totalCents / installmentsCount);
-      const remainderCents = totalCents % installmentsCount;
-      const installmentCents = i <= remainderCents ? (baseCents + 1) : baseCents;
-      installmentAmount = (installmentCents / 100) * sign;
-    }
-
-    const currentInstallmentNumber = i;
-
-    // Cria a parcela no banco de dados
-    const installment = await prisma.transactionInstallment.create({
+    const installment = await db.transactionInstallment.create({
       data: {
         userId,
         cardId,
         transactionId,
         invoiceId: invoice.id,
-        installmentNumber: currentInstallmentNumber,
-        amount: installmentAmount,
+        installmentNumber: i,
+        amount,
         dueMonth: referenceMonth,
         dueYear: referenceYear,
         status: invoice.status === 'paid' ? 'paid' : 'pending',
       },
     });
 
-    // Cria os splits da parcela (distribuindo sobras de centavos de split nas primeiras parcelas)
+    const preserved = options.preservedSplitStatus?.[created.length];
     for (const split of transaction.splits) {
-      let splitAmount;
-      if (isFixed) {
-        splitAmount = split.amount;
-      } else {
-        const signSplit = Math.sign(split.amount);
-        const totalSplitCents = Math.round(Math.abs(split.amount) * 100);
-        const baseSplitCents = Math.floor(totalSplitCents / installmentsCount);
-        const remainderSplitCents = totalSplitCents % installmentsCount;
-        const splitCents = i <= remainderSplitCents ? (baseSplitCents + 1) : baseSplitCents;
-        splitAmount = (splitCents / 100) * signSplit;
-      }
-
-      await prisma.installmentSplit.create({
-        data: {
-          installmentId: installment.id,
-          debtorId: split.debtorId,
-          amount: splitAmount,
-          paid: false,
-        },
+      const status = preserved?.get(split.debtorId);
+      splitRows.push({
+        installmentId: installment.id,
+        debtorId: split.debtorId,
+        amount: isFixed ? roundMoney(split.amount) : installmentShare(split.amount, installmentsCount, i),
+        paid: status?.paid ?? false,
+        paidAt: status?.paidAt ?? null,
       });
     }
+
+    created.push({ id: installment.id, installmentNumber: i });
   }
 
-  // Recalcula o valor total de todas as faturas afetadas
-  for (const invoiceId of invoiceIdsToRecalculate) {
-    await recalculateInvoiceAmount(invoiceId);
+  if (splitRows.length > 0) {
+    await db.installmentSplit.createMany({ data: splitRows });
   }
+
+  await recalculateInvoices(invoiceIds, db);
+  return created;
 }
-
-// Cache em memória para evitar rodar a verificação pesada no banco em toda requisição de página/layout
-const lastCheckedUsers = new Map<string, number>();
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
 
 /**
  * Calcula o limite utilizado real de um cartão ou de todos os cartões de um usuário,
  * desconsiderando parcelas futuras de transações recorrentes fixas.
  */
-export async function calculateUsedLimit(
-  userId: string,
-  cardId?: string
-): Promise<number> {
-  const now = new Date();
-  const currentMonth = now.getUTCMonth() + 1; // 1-indexed (Jan = 1)
-  const currentYear = now.getUTCFullYear();
+export async function calculateUsedLimit(userId: string, cardId?: string): Promise<number> {
+  const { month: currentMonth, year: currentYear } = todayInAppTz();
 
-  // Busca todas as parcelas pendentes vinculadas a faturas não pagas
   const installments = await prisma.transactionInstallment.findMany({
     where: {
       userId,
       cardId: cardId ? cardId : undefined,
       status: 'pending',
-      invoice: {
-        status: { in: ['open', 'closed', 'overdue'] }
-      }
+      invoice: { status: { not: 'paid' }, paidAt: null },
     },
-    include: {
-      transaction: {
-        select: {
-          recurrenceType: true
-        }
-      }
-    }
+    select: {
+      amount: true,
+      dueMonth: true,
+      dueYear: true,
+      transaction: { select: { recurrenceType: true } },
+    },
   });
 
-  let totalUsed = 0;
-  for (const inst of installments) {
-    const isFutureFixed =
-      (inst.transaction.recurrenceType === 'fixed' || inst.transaction.recurrenceType === 'fixed_ended') &&
-      (inst.dueYear > currentYear || (inst.dueYear === currentYear && inst.dueMonth > currentMonth));
-
-    if (!isFutureFixed) {
-      totalUsed += inst.amount;
-    }
-  }
-
-  return totalUsed;
+  return sumMoney(
+    installments
+      .filter((inst) => {
+        const isFutureFixed =
+          (inst.transaction.recurrenceType === 'fixed' || inst.transaction.recurrenceType === 'fixed_ended') &&
+          (inst.dueYear > currentYear || (inst.dueYear === currentYear && inst.dueMonth > currentMonth));
+        return !isFutureFixed;
+      })
+      .map((inst) => inst.amount)
+  );
 }
 
+// Throttle em memória: evita rodar a verificação pesada em toda navegação.
+// A proteção contra duplicidade não depende disso: é feita pela constraint
+// única (transactionId, installmentNumber) no banco.
+const lastCheckedUsers = new Map<string, number>();
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
+const RECURRING_WINDOW_MONTHS = 6;
+
 /**
- * Garante que todas as transações recorrentes ativas tenham sempre um saldo de faturamento de 6 meses futuros,
- * criando uma nova parcela no final a cada mês que se passa.
+ * Garante que todas as transações recorrentes ativas tenham sempre 6 meses de
+ * faturamento futuro, criando uma nova parcela no final a cada mês que se passa.
  */
-export async function ensureRecurringTransactions(userId: string): Promise<void> {
+export async function ensureRecurringTransactions(userId: string, { force = false } = {}): Promise<void> {
   const nowMs = Date.now();
   const lastCheck = lastCheckedUsers.get(userId);
-  if (lastCheck && nowMs - lastCheck < CACHE_TTL_MS) {
-    return;
-  }
+  if (!force && lastCheck && nowMs - lastCheck < CACHE_TTL_MS) return;
   lastCheckedUsers.set(userId, nowMs);
 
-  const now = new Date();
-  const currentMonth = now.getUTCMonth(); // 0-indexed (Jan = 0)
-  const currentYear = now.getUTCFullYear();
+  const { month, year } = todayInAppTz();
+  const currentMonthIdx = month - 1;
 
-  // 1. Busca os cartões ativos do usuário
-  const cards = await prisma.creditCard.findMany({
-    where: { userId, isActive: true },
-    select: { id: true }
-  });
-  const cardIds = cards.map(c => c.id);
-
-  if (cardIds.length === 0) return;
-
-  // 2. Busca todas as transações de recorrência fixa associadas aos cartões ativos
   const transactions = await prisma.transaction.findMany({
-    where: {
-      userId,
-      recurrenceType: 'fixed',
-      cardId: { in: cardIds },
-    },
-    include: {
-      installments: true,
-      card: true,
-      splits: true,
-    },
+    where: { userId, recurrenceType: 'fixed', card: { isActive: true } },
+    include: { installments: true, card: true, splits: true },
   });
 
-  // 3. Garante um saldo de 6 meses para cada transação recorrente
   for (const tx of transactions) {
-    const sortedInstallments = [...tx.installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
-    let maxInstallmentNumber = sortedInstallments.length > 0
-      ? sortedInstallments[sortedInstallments.length - 1].installmentNumber
-      : 0;
+    let maxInstallmentNumber = tx.installments.reduce((max, inst) => Math.max(max, inst.installmentNumber), 0);
 
-    // Calcula o mês e ano de início com base na data de compra da transação
-    const startDetails = calculateInvoiceDate(
-      tx.purchaseDate,
-      tx.card.closingDay,
-      tx.card.dueDay
-    );
-    const startMonth = startDetails.referenceMonth;
-    const startYear = startDetails.referenceYear;
+    const start = calculateInvoiceDate(tx.purchaseDate, tx.card.closingDay, tx.card.dueDay);
 
-    // Verifica cada mês na janela de 6 meses (do mês atual em diante)
-    for (let i = 0; i < 6; i++) {
-      const checkDate = new Date(Date.UTC(currentYear, currentMonth + i, 1));
-      const checkMonth = checkDate.getUTCMonth() + 1; // 1-indexed (Jan = 1)
-      const checkYear = checkDate.getUTCFullYear();
-
-      // Determina os detalhes de fatura para a parcela
-      // Usamos uma data simulada de compra baseada no dia de fechamento do cartão neste mês específico
-      const purchaseSimulatedDate = new Date(Date.UTC(checkYear, checkMonth - 1, tx.card.closingDay, 12, 0, 0));
+    for (let i = 0; i < RECURRING_WINDOW_MONTHS; i++) {
+      // Data simulada de compra no dia do fechamento do cartão neste mês.
+      const simulated = dateAtDay(year, currentMonthIdx + i, tx.card.closingDay, 12);
       const { referenceMonth, referenceYear, closingDate, dueDate } = calculateInvoiceDate(
-        purchaseSimulatedDate,
+        simulated,
         tx.card.closingDay,
         tx.card.dueDay
       );
 
-      // Evita criar parcelas para meses anteriores ao início/compra da transação
-      if (referenceYear < startYear || (referenceYear === startYear && referenceMonth < startMonth)) {
+      if (
+        referenceYear < start.referenceYear ||
+        (referenceYear === start.referenceYear && referenceMonth < start.referenceMonth)
+      ) {
         continue;
       }
 
-      // Verifica se já existe parcela para este mês de referência
       const exists = tx.installments.some(
         (inst) => inst.dueMonth === referenceMonth && inst.dueYear === referenceYear
       );
+      if (exists) continue;
 
-      if (!exists) {
-        // Incrementa a numeração da parcela
-        maxInstallmentNumber += 1;
-
-        // Obtém ou cria a fatura para o mês correspondente
-        const invoice = await getOrCreateInvoice(
-          userId,
-          tx.cardId,
-          referenceMonth,
-          referenceYear,
-          closingDate,
-          dueDate
-        );
-
-        // Cria a parcela no banco de dados
-        const installment = await prisma.transactionInstallment.create({
-          data: {
-            userId,
-            cardId: tx.cardId,
-            transactionId: tx.id,
-            invoiceId: invoice.id,
-            installmentNumber: maxInstallmentNumber,
-            amount: tx.amountTotal,
-            dueMonth: referenceMonth,
-            dueYear: referenceYear,
-            status: invoice.status === 'paid' ? 'paid' : 'pending',
-          },
-        });
-
-        // Cria os splits para esta nova parcela caso a transação seja compartilhada
-        for (const split of tx.splits) {
-          await prisma.installmentSplit.create({
+      const nextNumber = maxInstallmentNumber + 1;
+      try {
+        await prisma.$transaction(async (db) => {
+          const invoice = await getOrCreateInvoice(
+            userId, tx.cardId, referenceMonth, referenceYear, closingDate, dueDate, db
+          );
+          const installment = await db.transactionInstallment.create({
             data: {
-              installmentId: installment.id,
-              debtorId: split.debtorId,
-              amount: split.amount,
-              paid: false,
+              userId,
+              cardId: tx.cardId,
+              transactionId: tx.id,
+              invoiceId: invoice.id,
+              installmentNumber: nextNumber,
+              amount: roundMoney(tx.amountTotal),
+              dueMonth: referenceMonth,
+              dueYear: referenceYear,
+              status: invoice.status === 'paid' ? 'paid' : 'pending',
             },
           });
-        }
-
-        // Recalcula o valor total da fatura
-        await recalculateInvoiceAmount(invoice.id);
+          if (tx.splits.length > 0) {
+            await db.installmentSplit.createMany({
+              data: tx.splits.map((split) => ({
+                installmentId: installment.id,
+                debtorId: split.debtorId,
+                amount: roundMoney(split.amount),
+                paid: false,
+              })),
+            });
+          }
+          await recalculateInvoiceAmount(invoice.id, db);
+        }, TX_OPTIONS);
+        maxInstallmentNumber = nextNumber;
+      } catch (error) {
+        // P2002: outra requisição criou a mesma parcela ao mesmo tempo — nada a fazer.
+        if (isUniqueViolation(error)) break;
+        throw error;
       }
     }
   }
 }
 
 /**
- * Calcula dinamicamente o status de uma fatura com base nas datas e status de pagamento.
+ * Calcula dinamicamente o status de uma fatura com base nas datas (no fuso do app)
+ * e no status de pagamento.
  */
 export function getInvoiceStatus(invoice: {
   status: string;
@@ -486,19 +412,11 @@ export function getInvoiceStatus(invoice: {
   dueDate: Date | string;
   paidAt?: Date | string | null;
 }): 'paid' | 'overdue' | 'closed' | 'open' {
-  if (invoice.status === 'paid' || invoice.paidAt) {
-    return 'paid';
-  }
-  
-  const now = new Date();
-  const closing = new Date(invoice.closingDate);
-  const due = new Date(invoice.dueDate);
+  if (invoice.status === 'paid' || invoice.paidAt) return 'paid';
 
-  if (now > due) {
-    return 'overdue';
-  }
-  if (now > closing) {
-    return 'closed';
-  }
+  const today = todayInAppTz().iso;
+  if (today > utcDateOnly(invoice.dueDate)) return 'overdue';
+  // A fatura fecha no próprio dia do fechamento (compras desse dia já vão para a próxima).
+  if (today >= utcDateOnly(invoice.closingDate)) return 'closed';
   return 'open';
 }

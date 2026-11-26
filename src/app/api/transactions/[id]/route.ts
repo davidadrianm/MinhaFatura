@@ -1,489 +1,387 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionUser } from '@/lib/auth';
-import { recalculateInvoiceAmount, createInstallmentsForTransaction, ensureRecurringTransactions, calculateInvoiceDate, getOrCreateInvoice, shiftMonth } from '@/lib/invoice-utils';
+import { requireUser } from '@/lib/auth';
+import {
+  addPeriod,
+  calculateInvoiceDate,
+  createInstallmentsForTransaction,
+  ensureRecurringTransactions,
+  getOrCreateInvoice,
+  recalculateInvoices,
+  splitStatusFrom,
+  TX_OPTIONS,
+} from '@/lib/invoice-utils';
+import { installmentShare, roundMoney } from '@/lib/money';
+import {
+  errorResponse,
+  parseDateOnly,
+  parseEnum,
+  parseId,
+  parseIntInRange,
+  parseMoney,
+  parseSplits,
+  parseString,
+  requireString,
+  ValidationError,
+  type SplitInput,
+} from '@/lib/validation';
+import { assertOwnership } from '@/lib/ownership';
+import { EDIT_SCOPES, MAX_INSTALLMENTS } from '@/lib/constants';
+
+/** Multiplica (ou divide) os valores das divisões, arredondando para centavos. */
+function scaleSplits(splits: SplitInput[], factor: number): SplitInput[] {
+  return splits.map((s) => ({ debtorId: s.debtorId, amount: roundMoney(s.amount * factor) }));
+}
 
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    const user = await requireUser();
 
     const { id } = await params;
     const body = await request.json();
-    const {
-      description,
-      purchaseDate,
-      amountTotal,
-      cardId,
-      categoryId,
-      notes,
-      splits, // array of { debtorId, amount }
-      editScope, // 'only_this' | 'from_this_forward' | 'all'
-      selectedMonth, // number
-      selectedYear,  // number
-      isInstallmentLevelValues,
-      installmentsCount,
-      installmentStart,
-    } = body;
 
-    if (!description || !amountTotal || !cardId || !categoryId) {
-      return NextResponse.json({ success: false, error: 'Preencha todos os campos obrigatórios' }, { status: 400 });
-    }
-
-    // Find the original transaction
     const transaction = await prisma.transaction.findFirst({
       where: { id, userId: user.userId },
       include: {
-        installments: {
-          include: {
-            splits: true,
-          }
-        },
+        installments: { include: { splits: true } },
         splits: true,
-      }
+      },
     });
 
     if (!transaction) {
       return NextResponse.json({ success: false, error: 'Transação não encontrada' }, { status: 404 });
     }
 
-    const newAmountVal = parseFloat(amountTotal);
+    const description = requireString(body.description, 'Descrição', 200);
+    const amountInput = parseMoney(body.amountTotal, 'Valor');
+    const cardId = parseId(body.cardId, 'Cartão');
+    const categoryId = parseId(body.categoryId, 'Categoria');
+    const notes = parseString(body.notes, 'Observações', { max: 1000, required: false }) ?? null;
+    const splitsInput = parseSplits(body.splits, amountInput);
+    const purchaseDateInput = body.purchaseDate ? parseDateOnly(body.purchaseDate, 'Data da compra') : null;
+    const isInstallmentLevelValues = body.isInstallmentLevelValues === true;
+
+    const { card } = await assertOwnership(user.userId, {
+      cardId,
+      categoryId,
+      debtorIds: splitsInput.map((s) => s.debtorId),
+      allowInactiveCardId: transaction.cardId,
+    });
+
     const isRecurring = transaction.recurrenceType !== 'none';
-    const finalScope = isRecurring ? editScope : 'all';
+    const isInstallments = transaction.recurrenceType === 'installments';
+    const isFixed = transaction.recurrenceType === 'fixed' || transaction.recurrenceType === 'fixed_ended';
+    const period = transaction.recurrencePeriod || 'monthly';
+    const dbStart = transaction.installmentStart || 1;
+    const scope = isRecurring ? parseEnum(body.editScope, 'Escopo da edição', EDIT_SCOPES) : 'all';
 
-    if (finalScope === 'all') {
-      const newCount = (transaction.recurrenceType === 'installments' && installmentsCount !== undefined) ? installmentsCount : transaction.installmentsCount;
-      let newStart = (transaction.recurrenceType === 'installments' && installmentStart !== undefined) ? installmentStart : transaction.installmentStart;
+    // Posição (em períodos) de uma parcela em relação à data base da transação.
+    const stepsOf = (installmentNumber: number) => (isFixed ? installmentNumber - 1 : installmentNumber - dbStart);
 
-      let finalAmountTotal = newAmountVal;
-      let finalSplits = splits;
-
-      if (isInstallmentLevelValues && transaction.recurrenceType === 'installments') {
-        finalAmountTotal = newAmountVal * newCount;
-        if (splits && splits.length > 0) {
-          finalSplits = splits.map((s: any) => ({
-            ...s,
-            amount: parseFloat(s.amount) * newCount,
-          }));
-        }
+    // ------------------------------------------------------------------ TODAS
+    if (scope === 'all') {
+      const newCount = isInstallments && body.installmentsCount !== undefined
+        ? parseIntInRange(body.installmentsCount, 'Quantidade de parcelas', 1, MAX_INSTALLMENTS)
+        : transaction.installmentsCount;
+      const startInput = isInstallments && body.installmentStart !== undefined
+        ? parseIntInRange(body.installmentStart, 'Parcela inicial', 1, newCount)
+        : dbStart;
+      if (dbStart > newCount) {
+        throw new ValidationError('A quantidade de parcelas não pode ser menor que a parcela inicial');
       }
 
-      let newBasePurchaseDate = purchaseDate ? new Date(`${purchaseDate}T12:00:00.000Z`) : new Date(transaction.purchaseDate);
-
-      if (transaction.recurrenceType === 'installments' && installmentStart !== undefined) {
-        const card = await prisma.creditCard.findUnique({
-          where: { id: cardId }
-        });
-        if (!card) {
-          return NextResponse.json({ success: false, error: 'Cartão não encontrado' }, { status: 404 });
-        }
-
-        const parsedStart = parseInt(installmentStart.toString());
-        const dbStart = transaction.installmentStart || 1;
-        const offset = parsedStart - dbStart;
-        if (offset !== 0) {
-          if (transaction.recurrencePeriod === 'daily') {
-            newBasePurchaseDate.setUTCDate(newBasePurchaseDate.getUTCDate() - offset);
-          } else if (transaction.recurrencePeriod === 'weekly') {
-            newBasePurchaseDate.setUTCDate(newBasePurchaseDate.getUTCDate() - offset * 7);
-          } else if (transaction.recurrencePeriod === 'biweekly') {
-            newBasePurchaseDate.setUTCDate(newBasePurchaseDate.getUTCDate() - offset * 15);
-          } else { // monthly
-            newBasePurchaseDate = shiftMonth(newBasePurchaseDate, -offset);
-          }
-        }
-        newStart = dbStart;
+      let finalAmountTotal = amountInput;
+      let finalSplits = splitsInput;
+      if (isInstallmentLevelValues && isInstallments) {
+        finalAmountTotal = roundMoney(amountInput * newCount);
+        finalSplits = scaleSplits(splitsInput, newCount);
       }
 
-      // 1. Update the parent transaction attributes
-      await prisma.transaction.update({
-        where: { id },
-        data: {
-          description,
-          categoryId,
-          cardId,
-          notes,
-          amountTotal: finalAmountTotal,
-          installmentsCount: newCount,
-          installmentStart: newStart,
-          purchaseDate: newBasePurchaseDate,
-        }
-      });
-
-      // Update splits on transaction level
-      await prisma.transactionSplit.deleteMany({
-        where: { transactionId: id }
-      });
-      if (finalSplits && finalSplits.length > 0) {
-        await prisma.transactionSplit.createMany({
-          data: finalSplits.map((s: any) => ({
-            transactionId: id,
-            debtorId: s.debtorId,
-            amount: parseFloat(s.amount),
-          }))
-        });
+      // Se o usuário mudou "qual parcela é esta", a data base da compra é recuada/avançada.
+      let basePurchaseDate = purchaseDateInput ?? new Date(transaction.purchaseDate);
+      if (isInstallments && startInput !== dbStart) {
+        basePurchaseDate = addPeriod(basePurchaseDate, period, -(startInput - dbStart));
       }
+      const newStart = dbStart;
 
-      // 2. Update all installments
-      const sortedExistingInstallments = [...transaction.installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
-      const isFixed = transaction.recurrenceType === 'fixed' || transaction.recurrenceType === 'fixed_ended';
+      const sortedExisting = [...transaction.installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
       const loopStart = isFixed ? 1 : newStart;
-      const loopEnd = isFixed ? sortedExistingInstallments.length : newCount;
+      const loopEnd = isFixed ? sortedExisting.length : newCount;
 
-      const affectedInvoiceIds = new Set<string>();
-
-      // Get credit card details once to avoid querying in a loop
-      const card = await prisma.creditCard.findUnique({ where: { id: cardId } });
-      if (!card) {
-        return NextResponse.json({ success: false, error: 'Cartão não encontrado' }, { status: 404 });
-      }
-
-      for (let i = loopStart; i <= loopEnd; i++) {
-        let installmentAmount;
-        if (isFixed) {
-          installmentAmount = finalAmountTotal;
-        } else {
-          const sign = Math.sign(finalAmountTotal);
-          const totalCents = Math.round(Math.abs(finalAmountTotal) * 100);
-          const baseCents = Math.floor(totalCents / newCount);
-          const remainderCents = totalCents % newCount;
-          const installmentCents = i <= remainderCents ? (baseCents + 1) : baseCents;
-          installmentAmount = (installmentCents / 100) * sign;
-        }
-
-        const currentInstallmentNumber = i;
-
-        // Calculate reference date for this installment
-        const instPurchaseDate = new Date(newBasePurchaseDate);
-        const diff = isFixed ? (i - 1) : (i - newStart);
-        if (transaction.recurrencePeriod === 'daily') {
-          instPurchaseDate.setUTCDate(newBasePurchaseDate.getUTCDate() + diff);
-        } else if (transaction.recurrencePeriod === 'weekly') {
-          instPurchaseDate.setUTCDate(newBasePurchaseDate.getUTCDate() + diff * 7);
-        } else if (transaction.recurrencePeriod === 'biweekly') {
-          instPurchaseDate.setUTCDate(newBasePurchaseDate.getUTCDate() + diff * 15);
-        } else { // monthly
-          instPurchaseDate.setUTCMonth(newBasePurchaseDate.getUTCMonth() + diff);
-        }
-
-        const { referenceMonth, referenceYear, closingDate, dueDate } = calculateInvoiceDate(
-          instPurchaseDate,
-          card.closingDay,
-          card.dueDay
-        );
-
-        const newInvoice = await getOrCreateInvoice(
-          user.userId,
-          cardId,
-          referenceMonth,
-          referenceYear,
-          closingDate,
-          dueDate
-        );
-        const newInvoiceId = newInvoice.id;
-        affectedInvoiceIds.add(newInvoiceId);
-
-        // Find or create database installment
-        let instId: string;
-        const existingIndex = isFixed ? (i - 1) : (i - newStart);
-        if (existingIndex < sortedExistingInstallments.length) {
-          const existingInst = sortedExistingInstallments[existingIndex];
-          instId = existingInst.id;
-          if (existingInst.invoiceId) {
-            affectedInvoiceIds.add(existingInst.invoiceId);
-          }
-
-          await prisma.transactionInstallment.update({
-            where: { id: instId },
-            data: {
-              installmentNumber: currentInstallmentNumber,
-              amount: installmentAmount,
-              cardId,
-              invoiceId: newInvoiceId,
-              dueMonth: referenceMonth,
-              dueYear: referenceYear,
-            }
-          });
-        } else {
-          const newInst = await prisma.transactionInstallment.create({
-            data: {
-              userId: user.userId,
-              cardId,
-              transactionId: id,
-              invoiceId: newInvoiceId,
-              installmentNumber: currentInstallmentNumber,
-              amount: installmentAmount,
-              dueMonth: referenceMonth,
-              dueYear: referenceYear,
-              status: newInvoice.status === 'paid' ? 'paid' : 'pending',
-            }
-          });
-          instId = newInst.id;
-        }
-
-        // Update splits for this installment
-        await prisma.installmentSplit.deleteMany({
-          where: { installmentId: instId }
+      await prisma.$transaction(async (db) => {
+        await db.transaction.update({
+          where: { id },
+          data: {
+            description,
+            categoryId,
+            cardId,
+            notes,
+            amountTotal: finalAmountTotal,
+            installmentsCount: newCount,
+            installmentStart: newStart,
+            purchaseDate: basePurchaseDate,
+          },
         });
 
-        if (finalSplits && finalSplits.length > 0) {
-          for (const split of finalSplits) {
-            let splitAmount;
-            if (isFixed) {
-              splitAmount = parseFloat(split.amount);
-            } else {
-              const splitAmountParsed = parseFloat(split.amount);
-              const signSplit = Math.sign(splitAmountParsed);
-              const totalSplitCents = Math.round(Math.abs(splitAmountParsed) * 100);
-              const baseSplitCents = Math.floor(totalSplitCents / newCount);
-              const remainderSplitCents = totalSplitCents % newCount;
-              const splitCents = i <= remainderSplitCents ? (baseSplitCents + 1) : baseSplitCents;
-              splitAmount = (splitCents / 100) * signSplit;
-            }
+        await db.transactionSplit.deleteMany({ where: { transactionId: id } });
+        if (finalSplits.length > 0) {
+          await db.transactionSplit.createMany({
+            data: finalSplits.map((s) => ({ transactionId: id, debtorId: s.debtorId, amount: s.amount })),
+          });
+        }
 
-            await prisma.installmentSplit.create({
+        const affectedInvoiceIds = new Set<string>();
+
+        for (let i = loopStart; i <= loopEnd; i++) {
+          const amount = isFixed ? finalAmountTotal : installmentShare(finalAmountTotal, newCount, i);
+          const instDate = addPeriod(basePurchaseDate, period, isFixed ? i - 1 : i - newStart);
+          const { referenceMonth, referenceYear, closingDate, dueDate } = calculateInvoiceDate(
+            instDate, card.closingDay, card.dueDay
+          );
+          const invoice = await getOrCreateInvoice(
+            user.userId, cardId, referenceMonth, referenceYear, closingDate, dueDate, db
+          );
+          affectedInvoiceIds.add(invoice.id);
+          const newStatus = invoice.status === 'paid' ? 'paid' : 'pending';
+
+          const existing = sortedExisting[i - loopStart];
+          let instId: string;
+          let preserved = new Map<string, { paid: boolean; paidAt: Date | null }>();
+
+          if (existing) {
+            instId = existing.id;
+            preserved = splitStatusFrom(existing.splits);
+            if (existing.invoiceId) affectedInvoiceIds.add(existing.invoiceId);
+            await db.transactionInstallment.update({
+              where: { id: instId },
               data: {
-                installmentId: instId,
-                debtorId: split.debtorId,
-                amount: splitAmount,
-                paid: false,
-              }
+                installmentNumber: i,
+                amount,
+                cardId,
+                invoiceId: invoice.id,
+                dueMonth: referenceMonth,
+                dueYear: referenceYear,
+                // Mantém o status se continuar na mesma fatura; se mudou de fatura, segue a fatura nova.
+                status: existing.invoiceId === invoice.id ? existing.status : newStatus,
+              },
+            });
+          } else {
+            const created = await db.transactionInstallment.create({
+              data: {
+                userId: user.userId,
+                cardId,
+                transactionId: id,
+                invoiceId: invoice.id,
+                installmentNumber: i,
+                amount,
+                dueMonth: referenceMonth,
+                dueYear: referenceYear,
+                status: newStatus,
+              },
+            });
+            instId = created.id;
+          }
+
+          // Recria as divisões preservando quem já pagou (antes, tudo voltava para "pendente").
+          await db.installmentSplit.deleteMany({ where: { installmentId: instId } });
+          if (finalSplits.length > 0) {
+            await db.installmentSplit.createMany({
+              data: finalSplits.map((split) => {
+                const status = preserved.get(split.debtorId);
+                return {
+                  installmentId: instId,
+                  debtorId: split.debtorId,
+                  amount: isFixed ? split.amount : installmentShare(split.amount, newCount, i),
+                  paid: status?.paid ?? false,
+                  paidAt: status?.paidAt ?? null,
+                };
+              }),
+            });
+          }
+        }
+
+        // Remove parcelas que sobraram se a quantidade diminuiu.
+        const expected = loopEnd - loopStart + 1;
+        const toDelete = sortedExisting.slice(Math.max(expected, 0));
+        for (const inst of toDelete) {
+          if (inst.invoiceId) affectedInvoiceIds.add(inst.invoiceId);
+        }
+        if (toDelete.length > 0) {
+          await db.transactionInstallment.deleteMany({ where: { id: { in: toDelete.map((i) => i.id) } } });
+        }
+
+        await recalculateInvoices(affectedInvoiceIds, db);
+      }, TX_OPTIONS);
+
+      await ensureRecurringTransactions(user.userId, { force: true });
+      return NextResponse.json({ success: true });
+    }
+
+    const selectedMonth = parseIntInRange(body.selectedMonth, 'Mês selecionado', 1, 12);
+    const selectedYear = parseIntInRange(body.selectedYear, 'Ano selecionado', 2000, 2100);
+
+    // ------------------------------------------------------------- SÓ ESTA
+    if (scope === 'only_this') {
+      const target = transaction.installments.find(
+        (inst) => inst.dueMonth === selectedMonth && inst.dueYear === selectedYear
+      );
+      if (!target) {
+        return NextResponse.json({ success: false, error: 'Parcela não encontrada para o mês selecionado' }, { status: 404 });
+      }
+
+      const instPurchaseDate = purchaseDateInput
+        ?? addPeriod(transaction.purchaseDate, period, stepsOf(target.installmentNumber));
+
+      let newAmount = amountInput;
+      let newSplits = splitsInput;
+      if (isInstallments && !isInstallmentLevelValues) {
+        newAmount = roundMoney(amountInput / transaction.installmentsCount);
+        newSplits = scaleSplits(splitsInput, 1 / transaction.installmentsCount);
+      }
+
+      await prisma.$transaction(async (db) => {
+        const newTransaction = await db.transaction.create({
+          data: {
+            userId: user.userId,
+            cardId,
+            categoryId,
+            description,
+            purchaseDate: instPurchaseDate,
+            amountTotal: newAmount,
+            installmentsCount: 1,
+            notes,
+            recurrenceType: 'none',
+            splits: newSplits.length > 0 ? { create: newSplits } : undefined,
+          },
+        });
+
+        await createInstallmentsForTransaction(newTransaction.id, db, {
+          preservedSplitStatus: [splitStatusFrom(target.splits)],
+        });
+
+        await db.transactionInstallment.delete({ where: { id: target.id } });
+        if (target.invoiceId) await recalculateInvoices([target.invoiceId], db);
+
+        const remaining = await db.transactionInstallment.count({ where: { transactionId: id } });
+        if (remaining === 0) {
+          await db.transaction.delete({ where: { id } });
+        }
+      }, TX_OPTIONS);
+
+      await ensureRecurringTransactions(user.userId, { force: true });
+      return NextResponse.json({ success: true });
+    }
+
+    // ------------------------------------------------------- DESTA EM DIANTE
+    const future = transaction.installments
+      .filter((inst) => inst.dueYear > selectedYear || (inst.dueYear === selectedYear && inst.dueMonth >= selectedMonth))
+      .sort((a, b) => a.installmentNumber - b.installmentNumber);
+
+    if (future.length === 0) {
+      return NextResponse.json({ success: false, error: 'Nenhuma parcela futura encontrada' }, { status: 404 });
+    }
+
+    const first = future[0];
+    const instPurchaseDate = purchaseDateInput ?? addPeriod(transaction.purchaseDate, period, stepsOf(first.installmentNumber));
+
+    let newTxData: {
+      amountTotal: number;
+      installmentsCount: number;
+      installmentStart: number;
+      splits: SplitInput[];
+      onlyNumbers?: Set<number>;
+    };
+
+    if (isInstallments) {
+      // Mantém a semântica do app: amountTotal = valor da compra inteira e
+      // installmentsCount = total de parcelas; a nova transação começa na parcela `first`.
+      // (Antes, a contagem ficava menor que a parcela inicial e parcelas sumiam.)
+      const totalCount = transaction.installmentsCount;
+      const perInstallment = isInstallmentLevelValues ? amountInput : roundMoney(amountInput / totalCount);
+      const perSplits = isInstallmentLevelValues ? splitsInput : scaleSplits(splitsInput, 1 / totalCount);
+      newTxData = {
+        amountTotal: roundMoney(perInstallment * totalCount),
+        installmentsCount: totalCount,
+        installmentStart: first.installmentNumber,
+        splits: scaleSplits(perSplits, totalCount),
+        // Só recria as parcelas que realmente estavam nesta transação.
+        onlyNumbers: new Set(future.map((f) => f.installmentNumber)),
+      };
+    } else {
+      // Assinatura ativa: janela padrão de 6 meses (ensureRecurring estende depois).
+      // Assinatura já encerrada: recria só as parcelas que restavam, sem reativar.
+      newTxData = {
+        amountTotal: amountInput,
+        installmentsCount: transaction.recurrenceType === 'fixed_ended' ? future.length : 6,
+        installmentStart: 1,
+        splits: splitsInput,
+      };
+    }
+
+    await prisma.$transaction(async (db) => {
+      const newTransaction = await db.transaction.create({
+        data: {
+          userId: user.userId,
+          cardId,
+          categoryId,
+          description,
+          purchaseDate: instPurchaseDate,
+          amountTotal: newTxData.amountTotal,
+          installmentsCount: newTxData.installmentsCount,
+          notes,
+          recurrenceType: transaction.recurrenceType,
+          recurrencePeriod: period,
+          installmentStart: newTxData.installmentStart,
+          splits: newTxData.splits.length > 0 ? { create: newTxData.splits } : undefined,
+        },
+      });
+
+      // Para recorrências fixas, as novas parcelas são numeradas de 1 em diante e
+      // correspondem, na ordem, às parcelas futuras removidas.
+      await createInstallmentsForTransaction(newTransaction.id, db, {
+        onlyNumbers: newTxData.onlyNumbers,
+        preservedSplitStatus: future.map((f) => splitStatusFrom(f.splits)),
+      });
+
+      await db.transactionInstallment.deleteMany({ where: { id: { in: future.map((f) => f.id) } } });
+
+      if (isFixed) {
+        await db.transaction.update({ where: { id }, data: { recurrenceType: 'fixed_ended' } });
+      } else if (isInstallments) {
+        const remaining = await db.transactionInstallment.count({ where: { transactionId: id } });
+        if (remaining === 0) {
+          await db.transaction.delete({ where: { id } });
+        } else {
+          // A transação antiga passa a ir da parcela inicial até a anterior à editada,
+          // com valor total proporcional (para que edições futuras não inflem as parcelas).
+          const keptCount = first.installmentNumber - 1;
+          const ratio = keptCount / transaction.installmentsCount;
+          await db.transaction.update({
+            where: { id },
+            data: {
+              installmentsCount: keptCount,
+              amountTotal: roundMoney(transaction.amountTotal * ratio),
+            },
+          });
+          for (const split of transaction.splits) {
+            await db.transactionSplit.update({
+              where: { id: split.id },
+              data: { amount: roundMoney(split.amount * ratio) },
             });
           }
         }
       }
 
-      // Delete extra installments if count has decreased
-      const remainingCountExpected = isFixed ? sortedExistingInstallments.length : (newCount - newStart + 1);
-      if (sortedExistingInstallments.length > remainingCountExpected) {
-        const toDelete = sortedExistingInstallments.slice(remainingCountExpected);
-        for (const inst of toDelete) {
-          if (inst.invoiceId) {
-            affectedInvoiceIds.add(inst.invoiceId);
-          }
-          await prisma.transactionInstallment.delete({
-            where: { id: inst.id }
-          });
-        }
-      }
+      await recalculateInvoices(future.map((f) => f.invoiceId).filter((v): v is string => !!v), db);
+    }, TX_OPTIONS);
 
-      for (const invoiceId of affectedInvoiceIds) {
-        await recalculateInvoiceAmount(invoiceId);
-      }
-
-      await ensureRecurringTransactions(user.userId);
-
-      return NextResponse.json({ success: true });
-    }
-
-    if (finalScope === 'only_this') {
-      const targetInstallment = transaction.installments.find(
-        (inst) => inst.dueMonth === selectedMonth && inst.dueYear === selectedYear
-      );
-
-      if (!targetInstallment) {
-        return NextResponse.json({ success: false, error: 'Parcela não encontrada para o mês selecionado' }, { status: 404 });
-      }
-
-      let instPurchaseDate;
-      if (purchaseDate) {
-        instPurchaseDate = new Date(`${purchaseDate}T12:00:00.000Z`);
-      } else {
-        const i = targetInstallment.installmentNumber - transaction.installmentStart + 1;
-        instPurchaseDate = new Date(transaction.purchaseDate);
-        if (transaction.recurrencePeriod === 'daily') {
-          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1));
-        } else if (transaction.recurrencePeriod === 'weekly') {
-          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 7);
-        } else if (transaction.recurrencePeriod === 'biweekly') {
-          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 15);
-        } else {
-          instPurchaseDate.setUTCMonth(transaction.purchaseDate.getUTCMonth() + (i - 1));
-        }
-      }
-
-      let newTxAmountTotal = newAmountVal;
-      let newTxSplits = splits;
-
-      if (transaction.recurrenceType === 'installments') {
-        newTxAmountTotal = isInstallmentLevelValues
-          ? newAmountVal
-          : (newAmountVal / transaction.installmentsCount);
-
-        if (splits && splits.length > 0) {
-          newTxSplits = splits.map((s: any) => ({
-            debtorId: s.debtorId,
-            amount: isInstallmentLevelValues
-              ? parseFloat(s.amount)
-              : (parseFloat(s.amount) / transaction.installmentsCount),
-          }));
-        }
-      }
-
-      const newTransaction = await prisma.transaction.create({
-        data: {
-          userId: user.userId,
-          cardId,
-          categoryId,
-          description,
-          purchaseDate: instPurchaseDate,
-          amountTotal: newTxAmountTotal,
-          installmentsCount: 1,
-          notes,
-          recurrenceType: 'none',
-          splits: newTxSplits && newTxSplits.length > 0 ? {
-            create: newTxSplits.map((s: any) => ({
-              debtorId: s.debtorId,
-              amount: parseFloat(s.amount),
-            }))
-          } : undefined,
-        }
-      });
-
-      await createInstallmentsForTransaction(newTransaction.id);
-
-      const oldInvoiceId = targetInstallment.invoiceId;
-
-      await prisma.transactionInstallment.delete({
-        where: { id: targetInstallment.id }
-      });
-
-      if (oldInvoiceId) {
-        await recalculateInvoiceAmount(oldInvoiceId);
-      }
-
-      const remainingInstallmentsCount = await prisma.transactionInstallment.count({
-        where: { transactionId: id }
-      });
-      if (remainingInstallmentsCount === 0) {
-        await prisma.transaction.delete({ where: { id } });
-      }
-
-      await ensureRecurringTransactions(user.userId);
-
-      return NextResponse.json({ success: true });
-    }
-
-    if (finalScope === 'from_this_forward') {
-      const futureInstallments = transaction.installments.filter((inst) => {
-        return (inst.dueYear > selectedYear) || (inst.dueYear === selectedYear && inst.dueMonth >= selectedMonth);
-      }).sort((a, b) => a.installmentNumber - b.installmentNumber);
-
-      if (futureInstallments.length === 0) {
-        return NextResponse.json({ success: false, error: 'Nenhuma parcela futura encontrada' }, { status: 404 });
-      }
-
-      const firstFutureInst = futureInstallments[0];
-
-      let instPurchaseDate;
-      if (purchaseDate) {
-        instPurchaseDate = new Date(`${purchaseDate}T12:00:00.000Z`);
-      } else {
-        const i = firstFutureInst.installmentNumber - transaction.installmentStart + 1;
-        instPurchaseDate = new Date(transaction.purchaseDate);
-        if (transaction.recurrencePeriod === 'daily') {
-          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1));
-        } else if (transaction.recurrencePeriod === 'weekly') {
-          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 7);
-        } else if (transaction.recurrencePeriod === 'biweekly') {
-          instPurchaseDate.setUTCDate(transaction.purchaseDate.getUTCDate() + (i - 1) * 15);
-        } else {
-          instPurchaseDate.setUTCMonth(transaction.purchaseDate.getUTCMonth() + (i - 1));
-        }
-      }
-
-      let newTxAmountTotal = newAmountVal;
-      let newTxSplits = splits;
-
-      if (transaction.recurrenceType === 'installments') {
-        const instCount = futureInstallments.length;
-        const installmentAmount = isInstallmentLevelValues
-          ? newAmountVal
-          : (newAmountVal / transaction.installmentsCount);
-        newTxAmountTotal = installmentAmount * instCount;
-
-        if (splits && splits.length > 0) {
-          newTxSplits = splits.map((s: any) => ({
-            debtorId: s.debtorId,
-            amount: isInstallmentLevelValues
-              ? parseFloat(s.amount) * instCount
-              : (parseFloat(s.amount) / transaction.installmentsCount) * instCount,
-          }));
-        }
-      }
-
-      const newTransaction = await prisma.transaction.create({
-        data: {
-          userId: user.userId,
-          cardId,
-          categoryId,
-          description,
-          purchaseDate: instPurchaseDate,
-          amountTotal: newTxAmountTotal,
-          installmentsCount: transaction.recurrenceType === 'fixed' ? 6 : futureInstallments.length,
-          notes,
-          recurrenceType: transaction.recurrenceType,
-          recurrencePeriod: transaction.recurrencePeriod,
-          installmentStart: firstFutureInst.installmentNumber,
-          splits: newTxSplits && newTxSplits.length > 0 ? {
-            create: newTxSplits.map((s: any) => ({
-              debtorId: s.debtorId,
-              amount: parseFloat(s.amount),
-            }))
-          } : undefined,
-        }
-      });
-
-      await createInstallmentsForTransaction(newTransaction.id);
-
-      const affectedInvoiceIds = Array.from(
-        new Set(
-          futureInstallments
-            .map((inst) => inst.invoiceId)
-            .filter((id): id is string => !!id)
-        )
-      );
-
-      const futureInstallmentIds = futureInstallments.map((inst) => inst.id);
-      await prisma.transactionInstallment.deleteMany({
-        where: { id: { in: futureInstallmentIds } }
-      });
-
-      if (transaction.recurrenceType === 'fixed') {
-        await prisma.transaction.update({
-          where: { id },
-          data: { recurrenceType: 'fixed_ended' }
-        });
-      } else if (transaction.recurrenceType === 'installments') {
-        const remainingCount = transaction.installmentsCount - futureInstallments.length;
-        if (remainingCount <= 0) {
-          await prisma.transaction.delete({ where: { id } });
-        } else {
-          await prisma.transaction.update({
-            where: { id },
-            data: { installmentsCount: remainingCount }
-          });
-        }
-      }
-
-      for (const invoiceId of affectedInvoiceIds) {
-        await recalculateInvoiceAmount(invoiceId);
-      }
-
-      await ensureRecurringTransactions(user.userId);
-
-      return NextResponse.json({ success: true });
-    }
-
-    return NextResponse.json({ success: false, error: 'Ação não suportada' }, { status: 400 });
-  } catch (error: any) {
-    console.error('Erro ao editar transação:', error);
-    return NextResponse.json({ success: false, error: error.message || 'Erro interno do servidor' }, { status: 500 });
+    await ensureRecurringTransactions(user.userId, { force: true });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return errorResponse(error, 'Erro ao editar transação');
   }
 }
 
@@ -492,90 +390,53 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    const user = await requireUser();
 
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'all'; // 'all' or 'future'
-    const monthStr = searchParams.get('month');
-    const yearStr = searchParams.get('year');
 
     const transaction = await prisma.transaction.findFirst({
       where: { id, userId: user.userId },
-      include: {
-        installments: true
-      }
+      include: { installments: true },
     });
 
     if (!transaction) {
       return NextResponse.json({ success: false, error: 'Transação não encontrada' }, { status: 404 });
     }
 
-    if (type === 'future' && monthStr && yearStr) {
-      const targetMonth = parseInt(monthStr);
-      const targetYear = parseInt(yearStr);
+    if (type === 'future') {
+      // "Excluir desta em diante" só faz sentido para assinaturas (recorrência fixa).
+      if (transaction.recurrenceType !== 'fixed') {
+        throw new ValidationError('A exclusão de parcelas futuras só está disponível para recorrências fixas');
+      }
+      const targetMonth = parseIntInRange(searchParams.get('month'), 'Mês', 1, 12);
+      const targetYear = parseIntInRange(searchParams.get('year'), 'Ano', 2000, 2100);
 
-      // Busca as parcelas que vencem no mês/ano alvo em diante
-      const futureInstallments = transaction.installments.filter((inst) => {
-        return (inst.dueYear > targetYear) || (inst.dueYear === targetYear && inst.dueMonth >= targetMonth);
-      });
-
-      const affectedInvoiceIds = Array.from(
-        new Set(
-          futureInstallments
-            .map((inst) => inst.invoiceId)
-            .filter((id): id is string => !!id)
-        )
+      const futureInstallments = transaction.installments.filter(
+        (inst) => inst.dueYear > targetYear || (inst.dueYear === targetYear && inst.dueMonth >= targetMonth)
       );
 
-      const futureInstallmentIds = futureInstallments.map((inst) => inst.id);
-
-      // Deleta as parcelas futuras (splits e devedores serão apagados em cascata)
-      await prisma.transactionInstallment.deleteMany({
-        where: {
-          id: { in: futureInstallmentIds }
-        }
-      });
-
-      // Altera o tipo de recorrência para 'fixed_ended' para que o ensureRecurringTransactions não gere novas parcelas futuras
-      await prisma.transaction.update({
-        where: { id },
-        data: { recurrenceType: 'fixed_ended' }
-      });
-
-      // Recalcula o valor de todas as faturas afetadas
-      for (const invoiceId of affectedInvoiceIds) {
-        await recalculateInvoiceAmount(invoiceId);
-      }
+      await prisma.$transaction(async (db) => {
+        await db.transactionInstallment.deleteMany({
+          where: { id: { in: futureInstallments.map((i) => i.id) } },
+        });
+        // 'fixed_ended' impede que ensureRecurringTransactions gere novas parcelas.
+        await db.transaction.update({ where: { id }, data: { recurrenceType: 'fixed_ended' } });
+        await recalculateInvoices(futureInstallments.map((i) => i.invoiceId).filter((v): v is string => !!v), db);
+      }, TX_OPTIONS);
 
       return NextResponse.json({ success: true });
     }
 
-    // Guarda os IDs das faturas afetadas pelas parcelas (deleção completa de tudo)
-    const affectedInvoiceIds = Array.from(
-      new Set(
-        transaction.installments
-          .map((inst) => inst.invoiceId)
-          .filter((id): id is string => !!id)
-      )
-    );
-
-    // Deleta a transação (as parcelas serão deletadas em cascata conforme a relação onDelete: Cascade no banco)
-    await prisma.transaction.delete({
-      where: { id },
-    });
-
-    // Recalcula o valor de todas as faturas que continham parcelas desta transação
-    for (const invoiceId of affectedInvoiceIds) {
-      await recalculateInvoiceAmount(invoiceId);
-    }
+    await prisma.$transaction(async (db) => {
+      // As parcelas são removidas em cascata.
+      await db.transaction.delete({ where: { id } });
+      await recalculateInvoices(transaction.installments.map((i) => i.invoiceId).filter((v): v is string => !!v), db);
+    }, TX_OPTIONS);
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Erro ao deletar transação:', error);
-    return NextResponse.json({ success: false, error: 'Erro interno do servidor' }, { status: 500 });
+    return errorResponse(error, 'Erro ao deletar transação');
   }
 }

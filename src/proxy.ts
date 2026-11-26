@@ -7,13 +7,9 @@ export async function proxy(request: NextRequest) {
 
   const isAuthRoute = pathname === '/';
   
-  // Rotas que exigem login
-  const isProtectedRoute = 
-    pathname.startsWith('/dashboard') ||
-    pathname.startsWith('/cards') ||
-    pathname.startsWith('/transactions') ||
-    pathname.startsWith('/invoices') ||
-    pathname.startsWith('/categories');
+  // Rotas que exigem login (todas as páginas de src/app/(authenticated))
+  const protectedPrefixes = ['/dashboard', '/cards', '/transactions', '/invoices', '/categories', '/debtors', '/profile'];
+  const isProtectedRoute = protectedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 
   // APIs que exigem login (exceto login/cadastro/callback)
   const isProtectedApi =

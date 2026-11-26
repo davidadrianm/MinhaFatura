@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
+import { ensureUserRecord } from '@/lib/user-record';
 
 export async function POST(request: Request) {
   try {
@@ -25,6 +26,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    await ensureUserRecord(data.user);
 
     // Busca o tema do usuário no banco local
     const dbUser = await prisma.user.findUnique({

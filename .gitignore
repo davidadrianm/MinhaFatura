@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# dados locais e scripts avulsos (podem conter dados reais)
+/prisma/*.db
+/prisma/*.db-journal
+/scratch/
