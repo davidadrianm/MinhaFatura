@@ -5,6 +5,8 @@ import { formatCalendarDate } from '@/lib/date-utils';
 import { calculateUsedLimit, getInvoiceStatus } from '@/lib/invoice-utils';
 import { addMonthsToRef, todayInAppTz } from '@/lib/date-utils';
 import { roundMoney, sumMoney } from '@/lib/money';
+import { getUserPreferences } from '@/lib/user-preferences';
+import { currencySymbol as currencySymbolOf } from '@/lib/preferences';
 import { Suspense } from 'react';
 import DashboardSkeleton from '@/components/skeletons/DashboardSkeleton';
 
@@ -67,6 +69,7 @@ export default async function DashboardPage() {
 
 async function DashboardDataWrapper({ userId }: { userId: string }) {
   const user = { userId };
+  const currencySymbol = currencySymbolOf((await getUserPreferences(userId)).currency);
 
   // "Hoje" no fuso do app (o servidor da Vercel roda em UTC).
   const now = new Date();
@@ -344,7 +347,7 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
           <div className="flex justify-between items-start">
             <div>
               <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/75">Limite Disponível</span>
-              <p className="text-[11px] text-white/70 mt-0.5">de R$ {totalLimits.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} no total</p>
+              <p className="text-[11px] text-white/70 mt-0.5">de {currencySymbol} {totalLimits.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} no total</p>
             </div>
             <span className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center">
               <span className="material-symbols-outlined icon-fill text-[20px]">account_balance_wallet</span>
@@ -352,7 +355,7 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
           </div>
           <div>
             <span className="text-display-currency font-extrabold tracking-tight leading-none block">
-              <span className="text-headline-sm font-semibold text-white/70 mr-1">R$</span>
+              <span className="text-headline-sm font-semibold text-white/70 mr-1">{currencySymbol}</span>
               {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
             <div className="w-full bg-white/20 h-2 rounded-full mt-sm">
@@ -380,7 +383,7 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
           </div>
           <div>
             <span className="text-display-currency font-extrabold tracking-tight text-on-surface leading-none block">
-              <span className="text-headline-sm font-semibold text-on-surface-variant mr-1">R$</span>
+              <span className="text-headline-sm font-semibold text-on-surface-variant mr-1">{currencySymbol}</span>
               {totalLimitUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
             <div className="w-full bg-surface-container-high h-2 rounded-full mt-sm">
@@ -405,7 +408,7 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
           </div>
           <div>
             <span className="text-display-currency font-extrabold tracking-tight text-on-surface leading-none block">
-              <span className="text-headline-sm font-semibold text-on-surface-variant mr-1">R$</span>
+              <span className="text-headline-sm font-semibold text-on-surface-variant mr-1">{currencySymbol}</span>
               {totalPendingDebtors.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
             <Link href="/debtors" className="inline-flex items-center gap-1 mt-sm text-[11px] font-bold text-secondary hover:gap-2 transition-all">
@@ -471,18 +474,18 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
                     <div className="flex flex-col gap-[2px] text-[11px] text-on-surface-variant font-semibold flex-1 justify-center pl-4">
                       <span className="flex items-center gap-xs">
                         <span className="w-1.5 h-1.5 rounded-full bg-secondary shrink-0" />
-                        Titular: R$ {titularAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        Titular: {currencySymbol} {titularAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                       <span className="flex items-center gap-xs">
                         <span className="w-1.5 h-1.5 rounded-full bg-on-primary-container shrink-0" />
-                        Devedores: R$ {debtorsAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        Devedores: {currencySymbol} {debtorsAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
 
                     {/* Right: Total amount and status badge */}
                     <div className="flex flex-col items-end shrink-0 pl-sm min-w-[100px]">
                       <span className="text-body-sm font-bold text-on-surface">
-                        R$ {invoiceAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        {currencySymbol} {invoiceAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-1 ${
                         status === 'overdue' 
@@ -514,16 +517,16 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
             <div className="flex gap-md text-[11px] font-semibold text-on-surface-variant justify-center flex-1 pl-4">
               <span className="flex items-center gap-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-secondary shrink-0" />
-                Titular: R$ {currentMonthTitularSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                Titular: {currencySymbol} {currentMonthTitularSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
               <span className="flex items-center gap-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-on-primary-container shrink-0" />
-                Devedores: R$ {currentMonthDebtorsAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                Devedores: {currencySymbol} {currentMonthDebtorsAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
             </div>
             
             <span className="text-body-md font-bold text-on-surface min-w-[100px] text-right">
-              R$ {currentMonthSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {currencySymbol} {currentMonthSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
           </div>
         </div>
@@ -577,18 +580,18 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
                     <div className="flex flex-col gap-[2px] text-[11px] text-on-surface-variant font-semibold flex-1 justify-center pl-4">
                       <span className="flex items-center gap-xs">
                         <span className="w-1.5 h-1.5 rounded-full bg-secondary shrink-0" />
-                        Titular: R$ {titularAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        Titular: {currencySymbol} {titularAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                       <span className="flex items-center gap-xs">
                         <span className="w-1.5 h-1.5 rounded-full bg-on-primary-container shrink-0" />
-                        Devedores: R$ {debtorsAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        Devedores: {currencySymbol} {debtorsAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
 
                     {/* Right: Total amount and status badge */}
                     <div className="flex flex-col items-end shrink-0 pl-sm min-w-[100px]">
                       <span className="text-body-sm font-bold text-on-surface">
-                        R$ {inv.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        {currencySymbol} {inv.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-1 ${
                         status === 'overdue' 
@@ -620,16 +623,16 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
             <div className="flex gap-md text-[11px] font-semibold text-on-surface-variant justify-center flex-1 pl-4">
               <span className="flex items-center gap-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-secondary shrink-0" />
-                Titular: R$ {totalUpcomingTitular.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                Titular: {currencySymbol} {totalUpcomingTitular.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
               <span className="flex items-center gap-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-on-primary-container shrink-0" />
-                Devedores: R$ {totalUpcomingDebtors.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                Devedores: {currencySymbol} {totalUpcomingDebtors.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
             </div>
             
             <span className="text-body-md font-bold text-on-surface min-w-[100px] text-right">
-              R$ {totalUpcomingSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {currencySymbol} {totalUpcomingSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
           </div>
         </div>
@@ -662,7 +665,7 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
                 </div>
                 <div>
                   <p className="text-headline-md font-headline-md font-bold text-on-surface">
-                    R$ {inv.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {currencySymbol} {inv.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                   <p className="text-label-sm font-label-sm text-on-surface-variant flex items-center gap-xs mt-1">
                     <span className="material-symbols-outlined text-[16px]">calendar_month</span>
@@ -698,8 +701,8 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
             <div className="h-64 w-full relative border-b border-l border-outline-variant/30 flex items-end justify-between px-sm">
               {/* Y-Axis Labels — positioned relative to the chart border */}
               <div className="absolute left-[-46px] bottom-0 h-full flex flex-col justify-between text-[10px] text-on-surface-variant select-none pb-0">
-                <span>R$ {maxAmount.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</span>
-                <span>R$ {(maxAmount / 2).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</span>
+                <span>{currencySymbol} {maxAmount.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</span>
+                <span>{currencySymbol} {(maxAmount / 2).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</span>
                 <span className="text-[10px]">0</span>
               </div>
               
@@ -724,7 +727,7 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
                   >
                     {/* Tooltip */}
                     <div className="absolute -top-9 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-2 py-1 rounded-md text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 shadow-sm pointer-events-none">
-                      R$ {d.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {currencySymbol} {d.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </div>
                     <span className={`absolute -bottom-6 left-1/2 -translate-x-1/2 text-[11px] text-on-surface-variant ${isCurrentMonth ? 'font-bold text-secondary' : ''}`}>
                       {d.label}
@@ -750,7 +753,7 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
               <div className="w-32 h-32 bg-surface-container-lowest rounded-full flex items-center justify-center flex-col shadow-[0_0_14px_rgba(0,0,0,0.08)_inset]">
                 <span className="text-label-sm text-on-surface-variant font-medium">Total do Mês</span>
                 <span className="text-body-lg font-extrabold tracking-tight text-on-surface">
-                  R$ {currentMonthSpent.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+                  {currencySymbol} {currentMonthSpent.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
                 </span>
               </div>
             </div>
@@ -809,7 +812,7 @@ async function DashboardDataWrapper({ userId }: { userId: string }) {
               </div>
               <div className="flex flex-col items-end shrink-0">
                 <span className="text-body-md font-semibold text-on-surface">
-                  - R$ {tx.amountTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  - {currencySymbol} {tx.amountTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </span>
                 {tx.splits && tx.splits.length > 0 && (
                   <span className="inline-flex items-center gap-[2px] text-[10px] font-bold bg-primary-container text-on-primary-container px-1.5 py-[2px] rounded-full mt-1">

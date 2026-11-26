@@ -74,58 +74,51 @@ export default function ProfilePage() {
 
   useEffect(() => {
     fetchProfile();
-
-    // Load preferences from localStorage on client-side mount
-    if (typeof window !== 'undefined') {
-      const storedCurrency = localStorage.getItem('pref_currency');
-      if (storedCurrency) setCurrency(storedCurrency);
-
-      const storedCentRounding = localStorage.getItem('pref_cent_rounding');
-      if (storedCentRounding) setCentRounding(storedCentRounding);
-
-      const storedShowTxByInvoice = localStorage.getItem('pref_show_tx_by_invoice');
-      if (storedShowTxByInvoice) setShowTxByInvoice(storedShowTxByInvoice === 'true');
-
-      const storedNotifyInvoice = localStorage.getItem('pref_notify_invoice_close');
-      if (storedNotifyInvoice) setNotifyInvoiceClose(storedNotifyInvoice === 'true');
-
-      const storedNotifyLimit = localStorage.getItem('pref_notify_limit_exceeded');
-      if (storedNotifyLimit) setNotifyLimitExceeded(storedNotifyLimit === 'true');
-
-      const storedNotifyReport = localStorage.getItem('pref_notify_monthly_report');
-      if (storedNotifyReport) setNotifyMonthlyReport(storedNotifyReport === 'true');
-    }
   }, []);
 
-  const handleSavePreferences = (e: React.FormEvent) => {
+  // Salva as preferências na conta (tabela User) e recarrega os dados do servidor,
+  // para que moeda e exibição de transações já valham nas outras telas.
+  const savePreferences = async (data: Record<string, unknown>): Promise<string | null> => {
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) return json.error || 'Erro ao salvar preferências.';
+      router.refresh();
+      return null;
+    } catch {
+      return 'Erro de conexão ao salvar preferências.';
+    }
+  };
+
+  const handleSavePreferences = async (e: React.FormEvent) => {
     e.preventDefault();
     setPrefSuccess('');
     setPrefError('');
 
-    try {
-      localStorage.setItem('pref_currency', currency);
-      localStorage.setItem('pref_cent_rounding', centRounding);
-      localStorage.setItem('pref_show_tx_by_invoice', showTxByInvoice.toString());
+    const error = await savePreferences({ currency, centRounding, showTxByInvoice });
+    if (error) {
+      setPrefError(error);
+    } else {
       setPrefSuccess('Parâmetros de preferências salvos com sucesso!');
       setTimeout(() => setPrefSuccess(''), 3000);
-    } catch {
-      setPrefError('Erro ao salvar parâmetros locais.');
     }
   };
 
-  const handleSaveNotifications = (e: React.FormEvent) => {
+  const handleSaveNotifications = async (e: React.FormEvent) => {
     e.preventDefault();
     setNotifSuccess('');
     setNotifError('');
 
-    try {
-      localStorage.setItem('pref_notify_invoice_close', notifyInvoiceClose.toString());
-      localStorage.setItem('pref_notify_limit_exceeded', notifyLimitExceeded.toString());
-      localStorage.setItem('pref_notify_monthly_report', notifyMonthlyReport.toString());
+    const error = await savePreferences({ notifyInvoiceClose, notifyLimitExceeded, notifyMonthlyReport });
+    if (error) {
+      setNotifError(error);
+    } else {
       setNotifSuccess('Configurações de notificações salvas com sucesso!');
       setTimeout(() => setNotifSuccess(''), 3000);
-    } catch {
-      setNotifError('Erro ao salvar preferências de notificações.');
     }
   };
 
@@ -139,6 +132,14 @@ export default function ProfilePage() {
         setName(data.user.name);
         setEmail(data.user.email);
         setSelectedTheme(data.user.theme || 'light');
+        if (data.preferences) {
+          setCurrency(data.preferences.currency);
+          setCentRounding(data.preferences.centRounding);
+          setShowTxByInvoice(data.preferences.showTxByInvoice);
+          setNotifyInvoiceClose(data.preferences.notifyInvoiceClose);
+          setNotifyLimitExceeded(data.preferences.notifyLimitExceeded);
+          setNotifyMonthlyReport(data.preferences.notifyMonthlyReport);
+        }
       } else {
         console.error('Erro ao buscar perfil:', data.error);
       }
@@ -698,7 +699,7 @@ export default function ProfilePage() {
                             className="w-full bg-surface border border-outline-variant text-body-md font-body-md text-on-surface rounded-lg py-sm px-md focus:outline-none focus:ring-2 focus:ring-secondary focus:border-secondary shadow-sm transition-all"
                           >
                             <option value="BRL">Real (R$)</option>
-                            <option value="USD">Dólar ($)</option>
+                            <option value="USD">Dólar (US$)</option>
                             <option value="EUR">Euro (€)</option>
                           </select>
                         </div>
@@ -752,6 +753,7 @@ export default function ProfilePage() {
                   <div className="space-y-1">
                     <h4 className="text-body-lg font-bold text-on-surface">Notificações e Alertas</h4>
                     <p className="text-label-md text-on-surface-variant">Ative lembretes automáticos e relatórios mensais por e-mail.</p>
+                    <p className="text-label-sm text-on-surface-variant">O envio de e-mails ainda não está disponível. Suas escolhas ficam salvas na conta e passam a valer quando o envio for ativado.</p>
                   </div>
 
                   {notifSuccess && (

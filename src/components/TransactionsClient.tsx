@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDialog } from './DialogProvider';
+import { usePreferences, useCurrencySymbol } from './PreferencesProvider';
 import CustomSelect, { SelectOption } from './CustomSelect';
 import MonthPicker from './MonthPicker';
 import DatePicker from './DatePicker';
@@ -198,7 +199,8 @@ export default function TransactionsClient({
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const [isOpen, setIsOpen] = useState(false); // Modal state
   const [mounted, setMounted] = useState(false);
-  const [showTxByInvoice, setShowTxByInvoice] = useState(false);
+  const { showTxByInvoice } = usePreferences();
+  const currencySymbol = useCurrencySymbol();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
   const [txToEdit, setTxToEdit] = useState<Transaction | null>(null);
@@ -207,12 +209,6 @@ export default function TransactionsClient({
 
   useEffect(() => {
     setMounted(true);
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('pref_show_tx_by_invoice');
-      if (stored !== null) {
-        setShowTxByInvoice(stored === 'true');
-      }
-    }
     return () => setMounted(false);
   }, []);
   
@@ -287,7 +283,7 @@ export default function TransactionsClient({
 
   // Export filtered transactions to CSV
   const handleExportCSV = () => {
-    const headers = ['Data', 'Descrição', 'Categoria', 'Cartão', 'Tipo', 'Valor (R$)', 'Status', 'Compartilhado'];
+    const headers = ['Data', 'Descrição', 'Categoria', 'Cartão', 'Tipo', `Valor (${currencySymbol})`, 'Status', 'Compartilhado'];
     
     const rows = filteredTransactions.map(tx => {
       let dateStr = formatCalendarDate(tx.purchaseDate);
@@ -1128,7 +1124,7 @@ export default function TransactionsClient({
                         {getTransactionTypeBadge(tx)}
                       </td>
                       <td className="py-md px-md text-right font-bold text-on-surface whitespace-nowrap">
-                        R$ {(() => {
+                        {currencySymbol} {(() => {
                           const filter = getFilterMonthYear(filterMonth);
                           if (filter) {
                             const inst = tx.installments?.find(
@@ -1185,7 +1181,7 @@ export default function TransactionsClient({
                                 <div className="inline-flex flex-col items-end">
                                   <span className="inline-flex items-center gap-xs px-2 py-1 rounded-md bg-secondary-fixed/50 text-on-secondary-fixed-variant text-[10px] font-bold border border-secondary-fixed-dim/20 select-none">
                                     <span className="material-symbols-outlined text-[14px]">call_split</span>
-                                    + R$ {instSplitsSum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} a receber
+                                    + {currencySymbol} {instSplitsSum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} a receber
                                   </span>
                                 </div>
                               );
@@ -1198,7 +1194,7 @@ export default function TransactionsClient({
                               <div className="inline-flex flex-col items-end">
                                 <span className="inline-flex items-center gap-xs px-2 py-1 rounded-md bg-secondary-fixed/50 text-on-secondary-fixed-variant text-[10px] font-bold border border-secondary-fixed-dim/20 select-none">
                                   <span className="material-symbols-outlined text-[14px]">call_split</span>
-                                  + R$ {tx.splits.reduce((sum, s) => sum + s.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} a receber
+                                  + {currencySymbol} {tx.splits.reduce((sum, s) => sum + s.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} a receber
                                 </span>
                               </div>
                             );
@@ -1277,7 +1273,7 @@ export default function TransactionsClient({
                                           {inst.status === 'paid' ? 'Paga' : 'Pend'}
                                         </span>
                                       </div>
-                                      <p className="text-body-md font-bold text-on-surface mt-1">R$ {inst.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                      <p className="text-body-md font-bold text-on-surface mt-1">{currencySymbol} {inst.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                                       <p className="text-[9px] text-on-surface-variant font-medium mt-0.5">Ref: {inst.dueMonth.toString().padStart(2, '0')}/{inst.dueYear}</p>
                                     </div>
                                     
@@ -1287,7 +1283,7 @@ export default function TransactionsClient({
                                           <div key={s.id} className="flex justify-between items-center text-[9px]">
                                             <span className="text-on-surface-variant truncate max-w-[70px]">{s.debtor.name}:</span>
                                             <span className={`font-bold ${s.paid ? 'text-tertiary-container line-through' : 'text-secondary'}`}>
-                                              R$ {s.amount.toLocaleString('pt-BR')}
+                                              {currencySymbol} {s.amount.toLocaleString('pt-BR')}
                                             </span>
                                           </div>
                                         ))}
@@ -1368,7 +1364,7 @@ export default function TransactionsClient({
                   <div>
                     <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">Valor Total</label>
                     <div className="relative">
-                      <span className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant font-medium select-none">R$</span>
+                      <span className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant font-medium select-none">{currencySymbol}</span>
                       <input 
                         type="text" 
                         required
@@ -1527,7 +1523,7 @@ export default function TransactionsClient({
                               <span className="text-on-surface font-semibold">{s.name}</span>
                             </div>
                             <div className="flex items-center gap-sm">
-                              <span className="text-secondary font-bold">R$ {parseFloat(s.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                              <span className="text-secondary font-bold">{currencySymbol} {parseFloat(s.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                               <button 
                                 type="button"
                                 onClick={() => handleRemoveSplit(s.debtorId)}
@@ -1542,8 +1538,8 @@ export default function TransactionsClient({
                         <div className="flex justify-between items-center text-[10px] text-on-surface-variant bg-surface-container-low p-sm rounded-lg border border-outline-variant/20">
                           <span>Total Divisão:</span>
                           <span className="font-bold">
-                            R$ {formSplits.reduce((sum, s) => sum + parseFloat(s.amount), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            {amountTotal && ` (Sua parte: R$ ${(parseFloat(amountTotal) - formSplits.reduce((sum, s) => sum + parseFloat(s.amount), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`}
+                            {currencySymbol} {formSplits.reduce((sum, s) => sum + parseFloat(s.amount), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            {amountTotal && ` (Sua parte: ${currencySymbol} ${(parseFloat(amountTotal) - formSplits.reduce((sum, s) => sum + parseFloat(s.amount), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`}
                           </span>
                         </div>
                       </div>
@@ -1567,9 +1563,9 @@ export default function TransactionsClient({
                         </div>
                         
                         <div className="w-full sm:w-5/12">
-                          <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">Valor (R$)</label>
+                          <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">Valor ({currencySymbol})</label>
                           <div className="relative">
-                            <span className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant font-medium select-none text-body-md">R$</span>
+                            <span className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant font-medium select-none text-body-md">{currencySymbol}</span>
                             <input
                               type="text"
                               placeholder="0,00"
