@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MonthPicker from './MonthPicker';
 import { useDialog } from './DialogProvider';
+import { useCurrencySymbol } from './PreferencesProvider';
 
 
 
@@ -78,6 +79,7 @@ interface DebtorsClientProps {
 
 export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
   const { confirm, alert } = useDialog();
+  const currencySymbol = useCurrencySymbol();
   const [debtors, setDebtors] = useState<Debtor[]>(initialDebtors);
   const [selectedDebtorId, setSelectedDebtorId] = useState<string | null>(
     initialDebtors[0]?.id || null
@@ -274,7 +276,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
           </div>
           <div>
             <div className="text-display-currency font-display-currency text-primary">
-              R$ {totalReceber.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {currencySymbol} {totalReceber.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-outline-variant/20 flex items-center justify-between text-label-sm font-label-sm">
@@ -291,7 +293,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
           </div>
           <div>
             <div className="text-display-currency font-display-currency text-on-tertiary-container">
-              R$ {totalRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {currencySymbol} {totalRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
           </div>
           <div className="mt-4">
@@ -310,7 +312,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
           </div>
           <div>
             <div className="text-display-currency font-display-currency text-on-surface">
-              R$ {totalReceber.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {currencySymbol} {totalReceber.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-outline-variant/20 flex items-center justify-between text-label-sm font-label-sm">
@@ -397,7 +399,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
                         <div className="min-w-0">
                           <p className="text-body-md font-bold truncate text-on-surface">{d.name}</p>
                           <p className="text-[10px] text-on-surface-variant mt-0.5">
-                            Total: R$ {d.totalAmount.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+                            Total: {currencySymbol} {d.totalAmount.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
                           </p>
                         </div>
                       </div>
@@ -405,7 +407,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
                       <div className="flex items-center gap-sm shrink-0">
                         <div className="text-right">
                           <p className={`text-xs font-black ${d.pendingAmount > 0 ? 'text-secondary' : 'text-on-tertiary-container'}`}>
-                            R$ {d.pendingAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            {currencySymbol} {d.pendingAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </p>
                           <p className="text-[8px] text-on-surface-variant uppercase tracking-wider font-bold">Pendente</p>
                         </div>
@@ -448,7 +450,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
                 <div className="text-right bg-surface-container-low border border-outline-variant/35 px-sm py-xs rounded-lg">
                   <span className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider block">Saldo Pendente</span>
                   <span className="text-headline-md font-black text-secondary">
-                    R$ {pendingAmountForPeriod.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {currencySymbol} {pendingAmountForPeriod.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -581,7 +583,7 @@ export default function DebtorsClient({ initialDebtors }: DebtorsClientProps) {
                           <p className={`text-body-md font-bold ${
                             debtorPaid ? 'text-on-tertiary-container/70 line-through' : 'text-secondary'
                           }`}>
-                            R$ {inst.debtorAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            {currencySymbol} {inst.debtorAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </p>
                           {debtorPaid && inst.debtorPaidAt && (
                             <p className="text-[8px] text-on-surface-variant font-medium">

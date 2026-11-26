@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/auth';
 import { errorResponse } from '@/lib/validation';
 import { DEFAULT_CATEGORIES } from '@/lib/user-record';
+import { PREFERENCES_SELECT, parsePreferencesUpdate, toPreferences, type UserPreferences } from '@/lib/preferences';
 
 export async function GET() {
   try {
@@ -16,6 +17,7 @@ export async function GET() {
         email: true,
         theme: true,
         createdAt: true,
+        ...PREFERENCES_SELECT,
       },
     });
 
@@ -31,9 +33,14 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       user: {
-        ...user,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        theme: user.theme,
+        createdAt: user.createdAt,
         avatarUrl: session.avatarUrl,
       },
+      preferences: toPreferences(user),
       stats: {
         cards: cardsCount,
         categories: categoriesCount,
@@ -50,7 +57,8 @@ export async function PUT(request: Request) {
   try {
     const session = await requireUser();
 
-    const { name, email, currentPassword, newPassword, theme } = await request.json();
+    const body = (await request.json()) ?? {};
+    const { name, email, currentPassword, newPassword, theme } = body;
 
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
@@ -60,7 +68,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: 'Usuário não encontrado' }, { status: 404 });
     }
 
-    const updateData: { name?: string; theme?: string } = {};
+    const updateData: { name?: string; theme?: string } & Partial<UserPreferences> = {};
     const messages: string[] = [];
 
     // 1. Nome
@@ -81,6 +89,13 @@ export async function PUT(request: Request) {
       }
       updateData.theme = theme;
     }
+
+    // 2b. Preferências (moeda, arredondamento, exibição e notificações)
+    const prefs = parsePreferencesUpdate(body);
+    if ('error' in prefs) {
+      return NextResponse.json({ success: false, error: prefs.error }, { status: 400 });
+    }
+    Object.assign(updateData, prefs.data);
 
     const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
     const authEmail = (session.email || '').toLowerCase();
@@ -186,6 +201,7 @@ export async function PUT(request: Request) {
         theme: updatedUser.theme,
         createdAt: updatedUser.createdAt,
       },
+      preferences: toPreferences(updatedUser),
     });
 
     // Define o cookie de tema

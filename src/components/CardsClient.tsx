@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CustomSelect, { SelectOption } from './CustomSelect';
 import { useDialog } from './DialogProvider';
+import { useCurrencySymbol } from './PreferencesProvider';
 
 const bankOptions: SelectOption[] = [
   { value: 'Nubank', label: 'Nubank', icon: 'account_balance' },
@@ -123,6 +124,7 @@ interface CardsClientProps {
 
 export default function CardsClient({ initialCards }: CardsClientProps) {
   const { confirm, alert } = useDialog();
+  const currencySymbol = useCurrencySymbol();
   const [cards, setCards] = useState<CardWithInvoices[]>(initialCards);
   const [editingCard, setEditingCard] = useState<CardWithInvoices | null>(null);
   const [name, setName] = useState('');
@@ -337,7 +339,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
     .filter(c => c.id !== editingCard?.id && !c.parentCardId)
     .map(c => ({
       value: c.id,
-      label: `${c.bankName} - ${c.name} (R$ ${c.limit.toLocaleString('pt-BR')})`,
+      label: `${c.bankName} - ${c.name} (${currencySymbol} ${c.limit.toLocaleString('pt-BR')})`,
       icon: 'credit_card' as const
     }));
 
@@ -426,11 +428,11 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
                     <div className="flex justify-between items-end mb-1">
                       <div>
                         <p className="text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold">Limite Disponível</p>
-                        <p className="text-body-md font-semibold text-on-surface">R$ {limitAvailable.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <p className="text-body-md font-semibold text-on-surface">{currencySymbol} {limitAvailable.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold">Limite em Uso</p>
-                        <p className="text-body-md font-semibold text-on-surface">R$ {displayLimitUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <p className="text-body-md font-semibold text-on-surface">{currencySymbol} {displayLimitUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                       </div>
                     </div>
 
@@ -448,7 +450,7 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
                         {isShared && (
                           <span className="material-symbols-outlined text-[12px] text-secondary">link</span>
                         )}
-                        <span>Total: R$ {displayLimit.toLocaleString('pt-BR')}</span>
+                        <span>Total: {currencySymbol} {displayLimit.toLocaleString('pt-BR')}</span>
                       </span>
                     </div>
 
@@ -674,9 +676,9 @@ export default function CardsClient({ initialCards }: CardsClientProps) {
 
             {!shareLimit && (
               <div className="space-y-1">
-                <label className="text-label-sm font-label-sm text-on-surface-variant block">Limite Total (R$)</label>
+                <label className="text-label-sm font-label-sm text-on-surface-variant block">Limite Total ({currencySymbol})</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant font-medium select-none text-body-md">R$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant font-medium select-none text-body-md">{currencySymbol}</span>
                   <input
                     type="text"
                     required

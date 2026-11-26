@@ -209,7 +209,7 @@ export async function createInstallmentsForTransaction(
 ) {
   const transaction = await db.transaction.findUnique({
     where: { id: transactionId },
-    include: { card: true, splits: true },
+    include: { card: true, splits: true, user: { select: { centRounding: true } } },
   });
   if (!transaction) throw new Error('Transação não encontrada');
 
@@ -217,6 +217,9 @@ export async function createInstallmentsForTransaction(
   const recurrencePeriod = transaction.recurrencePeriod || 'monthly';
   const installmentStart = transaction.installmentStart || 1;
   const isFixed = transaction.recurrenceType === 'fixed' || transaction.recurrenceType === 'fixed_ended';
+
+  // Preferência do Perfil: qual parcela recebe os centavos que sobram na divisão.
+  const rounding = transaction.user?.centRounding === 'last' ? 'last' : 'first';
 
   const invoiceIds = new Set<string>();
   const created: { id: string; installmentNumber: number }[] = [];
@@ -237,7 +240,7 @@ export async function createInstallmentsForTransaction(
     const invoice = await getOrCreateInvoice(userId, cardId, referenceMonth, referenceYear, closingDate, dueDate, db);
     invoiceIds.add(invoice.id);
 
-    const amount = isFixed ? roundMoney(amountTotal) : installmentShare(amountTotal, installmentsCount, i);
+    const amount = isFixed ? roundMoney(amountTotal) : installmentShare(amountTotal, installmentsCount, i, rounding);
 
     const installment = await db.transactionInstallment.create({
       data: {
@@ -259,7 +262,7 @@ export async function createInstallmentsForTransaction(
       splitRows.push({
         installmentId: installment.id,
         debtorId: split.debtorId,
-        amount: isFixed ? roundMoney(split.amount) : installmentShare(split.amount, installmentsCount, i),
+        amount: isFixed ? roundMoney(split.amount) : installmentShare(split.amount, installmentsCount, i, rounding),
         paid: status?.paid ?? false,
         paidAt: status?.paidAt ?? null,
       });

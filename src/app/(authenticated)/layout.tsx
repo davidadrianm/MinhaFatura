@@ -6,6 +6,8 @@ import BottomNavBar from '@/components/BottomNavBar';
 import { ensureRecurringTransactions } from '@/lib/invoice-utils';
 import { DialogProvider } from '@/components/DialogProvider';
 import { ensureUserRecord } from '@/lib/user-record';
+import { PreferencesProvider } from '@/components/PreferencesProvider';
+import { getUserPreferences } from '@/lib/user-preferences';
 
 export default async function AuthenticatedLayout({
   children,
@@ -28,7 +30,10 @@ export default async function AuthenticatedLayout({
     console.error('Erro ao garantir transações recorrentes:', err);
   }
 
+  const preferences = await getUserPreferences(user.userId);
+
   return (
+    <PreferencesProvider value={preferences}>
     <DialogProvider>
       <div className="flex h-screen overflow-hidden bg-background text-on-background font-sans">
         {/* Sidebar de Navegação (Desktop Only) */}
@@ -51,5 +56,6 @@ export default async function AuthenticatedLayout({
         </div>
       </div>
     </DialogProvider>
+    </PreferencesProvider>
   );
 }
