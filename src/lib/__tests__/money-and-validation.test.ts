@@ -14,6 +14,14 @@ describe('dinheiro', () => {
     expect(sumMoney(parcelas)).toBe(100);
   });
 
+  it('distribui os centavos nas últimas parcelas quando escolhido', () => {
+    const parcelas = [1, 2, 3].map((i) => installmentShare(100, 3, i, 'last'));
+    expect(parcelas).toEqual([33.33, 33.33, 33.34]);
+    expect(sumMoney(parcelas)).toBe(100);
+    const quatro = [1, 2, 3, 4].map((i) => installmentShare(100.02, 4, i, 'last'));
+    expect(quatro).toEqual([25, 25, 25.01, 25.01]);
+  });
+
   it('mantém o sinal em estornos', () => {
     expect(installmentShare(-50, 2, 1)).toBe(-25);
   });

@@ -27,14 +27,22 @@ export function sumMoney(values: Iterable<number>): number {
 }
 
 /**
- * Divide um total em `count` parcelas, distribuindo os centavos que sobram nas
- * primeiras parcelas. `position` é o número da parcela (1-based).
+ * Divide um total em `count` parcelas. Os centavos que sobram vão para as
+ * primeiras parcelas (`rounding = 'first'`, padrão) ou para as últimas
+ * (`rounding = 'last'`), conforme a preferência do usuário no Perfil.
+ * `position` é o número da parcela (1-based).
  */
-export function installmentShare(total: number, count: number, position: number): number {
+export function installmentShare(
+  total: number,
+  count: number,
+  position: number,
+  rounding: 'first' | 'last' = 'first'
+): number {
   const sign = Math.sign(total);
   const totalCents = Math.abs(toCents(total));
   const base = Math.floor(totalCents / count);
   const remainder = totalCents % count;
-  const cents = position <= remainder ? base + 1 : base;
+  const getsExtra = rounding === 'last' ? position > count - remainder : position <= remainder;
+  const cents = getsExtra ? base + 1 : base;
   return fromCents(cents) * sign;
 }
