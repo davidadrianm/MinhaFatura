@@ -12,6 +12,7 @@ import {
   TX_OPTIONS,
 } from '@/lib/invoice-utils';
 import { installmentShare, roundMoney } from '@/lib/money';
+import { getUserPreferences } from '@/lib/user-preferences';
 import {
   errorResponse,
   parseDateOnly,
@@ -111,6 +112,9 @@ export async function PUT(
       const loopStart = isFixed ? 1 : newStart;
       const loopEnd = isFixed ? sortedExisting.length : newCount;
 
+      // Preferência do Perfil: qual parcela recebe os centavos que sobram na divisão.
+      const { centRounding: rounding } = await getUserPreferences(user.userId);
+
       await prisma.$transaction(async (db) => {
         await db.transaction.update({
           where: { id },
@@ -136,7 +140,7 @@ export async function PUT(
         const affectedInvoiceIds = new Set<string>();
 
         for (let i = loopStart; i <= loopEnd; i++) {
-          const amount = isFixed ? finalAmountTotal : installmentShare(finalAmountTotal, newCount, i);
+          const amount = isFixed ? finalAmountTotal : installmentShare(finalAmountTotal, newCount, i, rounding);
           const instDate = addPeriod(basePurchaseDate, period, isFixed ? i - 1 : i - newStart);
           const { referenceMonth, referenceYear, closingDate, dueDate } = calculateInvoiceDate(
             instDate, card.closingDay, card.dueDay
@@ -194,7 +198,7 @@ export async function PUT(
                 return {
                   installmentId: instId,
                   debtorId: split.debtorId,
-                  amount: isFixed ? split.amount : installmentShare(split.amount, newCount, i),
+                  amount: isFixed ? split.amount : installmentShare(split.amount, newCount, i, rounding),
                   paid: status?.paid ?? false,
                   paidAt: status?.paidAt ?? null,
                 };

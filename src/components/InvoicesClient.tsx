@@ -6,6 +6,7 @@ import CustomSelect, { SelectOption } from './CustomSelect';
 import MonthPicker from './MonthPicker';
 import { formatCalendarDate } from '@/lib/date-utils';
 import { useDialog } from './DialogProvider';
+import { useCurrencySymbol } from './PreferencesProvider';
 
 const statusOptions: SelectOption[] = [
   { value: 'all', label: 'Todos os Status', icon: 'filter_list' },
@@ -179,6 +180,7 @@ const getBankBadge = (bankName: string, cardColor?: string) => {
 
 export default function InvoicesClient({ initialInvoices, cards }: InvoicesClientProps) {
   const { confirm, alert } = useDialog();
+  const currencySymbol = useCurrencySymbol();
   const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
   const [filterCard, setFilterCard] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -207,7 +209,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
 
   // Export filtered invoices to CSV
   const handleExportCSV = () => {
-    const headers = ['Mês Referência', 'Cartão', 'Fechamento', 'Vencimento', 'Total (R$)', 'Status'];
+    const headers = ['Mês Referência', 'Cartão', 'Fechamento', 'Vencimento', `Total (${currencySymbol})`, 'Status'];
     
     const rows = filteredInvoices.map(inv => {
       const display = getInvoiceDisplayData(inv);
@@ -494,7 +496,7 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
                   <div className="text-right">
                     <p className="text-[9px] text-on-surface-variant uppercase tracking-wider font-bold">Total Fatura</p>
                     <p className="text-headline-md font-black text-on-surface">
-                      R$ {inv.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {currencySymbol} {inv.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                     {(() => {
                       const totalDebtors = inv.installments.reduce((sum, inst) => {
@@ -505,9 +507,9 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
                       if (totalDebtors > 0) {
                         return (
                           <div className="flex justify-end gap-xs text-[9px] text-on-surface-variant font-bold mt-0.5 select-none">
-                            <span>Titular: R$ {totalTitular.toLocaleString('pt-BR')}</span>
+                            <span>Titular: {currencySymbol} {totalTitular.toLocaleString('pt-BR')}</span>
                             <span>•</span>
-                            <span className="text-secondary">Devedores: R$ {totalDebtors.toLocaleString('pt-BR')}</span>
+                            <span className="text-secondary">Devedores: {currencySymbol} {totalDebtors.toLocaleString('pt-BR')}</span>
                           </div>
                         );
                       }
@@ -586,11 +588,11 @@ export default function InvoicesClient({ initialInvoices, cards }: InvoicesClien
                               </div>
                               <div className="text-right shrink-0">
                                 <p className="font-bold text-on-surface">
-                                  R$ {inst.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  {currencySymbol} {inst.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                 </p>
                                 <p className="text-[9px] text-on-surface-variant font-medium">
                                   Parcela {inst.installmentNumber}
-                                  {instDebtorsTotal > 0 && ` (Devedores: R$ ${instDebtorsTotal.toLocaleString('pt-BR')})`}
+                                  {instDebtorsTotal > 0 && ` (Devedores: ${currencySymbol} ${instDebtorsTotal.toLocaleString('pt-BR')})`}
                                 </p>
                               </div>
                             </div>
